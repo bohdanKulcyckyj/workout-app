@@ -1,7 +1,35 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import { storage } from "@/lib/storage";
+import { Button } from "@/components/ui/button";
+import { PlanForm } from "@/components/plan-form";
+import type { WorkoutPlan } from "@/lib/types";
+
 export default function CreatePlanPage() {
+  const router = useRouter();
+
+  function handleSave(plan: WorkoutPlan) {
+    storage.savePlan(plan);
+    router.push(`/plan/${plan.id}`);
+  }
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold">Create New Plan</h1>
+    <div className="space-y-6">
+      <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => router.push("/")}
+        >
+          <ArrowLeft className="size-4" />
+          <span className="sr-only">Back</span>
+        </Button>
+        <h1 className="text-2xl font-bold">Create New Plan</h1>
+      </div>
+
+      <PlanForm onSave={handleSave} submitLabel="Create Plan" />
     </div>
   );
 }

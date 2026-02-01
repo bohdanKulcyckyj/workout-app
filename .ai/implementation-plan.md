@@ -14,10 +14,20 @@ A mobile-first MVP for gym trainers to manage workout plans and track exercises 
 - `/plan/[id]/workout` — Workout mode
 
 **Key files (current state):**
-- [app/layout.tsx](app/layout.tsx) — Root layout (Geist fonts, default metadata)
-- [app/page.tsx](app/page.tsx) — Home page (default Next.js template, will be replaced)
-- [app/globals.css](app/globals.css) — Global styles with CSS variables for light/dark
-- [package.json](package.json) — Next.js 16, React 19, Tailwind v4
+- [app/layout.tsx](app/layout.tsx) — Root layout (Geist fonts, dark mode, max-w-lg container)
+- [app/page.tsx](app/page.tsx) — Home page (plan list with empty state)
+- [app/plan/create/page.tsx](app/plan/create/page.tsx) — Create new plan form
+- [app/plan/[id]/page.tsx](app/plan/[id]/page.tsx) — Plan detail (preview mode, read-only)
+- [app/plan/[id]/edit/page.tsx](app/plan/[id]/edit/page.tsx) — Edit plan form
+- [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) — Workout mode (stub)
+- [app/globals.css](app/globals.css) — Global styles with OKLCH dark gym theme
+- [components/plan-list-table.tsx](components/plan-list-table.tsx) — Plan list table with actions
+- [components/plan-form.tsx](components/plan-form.tsx) — Shared plan form (create/edit) with React Hook Form + Zod
+- [components/exercise-table.tsx](components/exercise-table.tsx) — Read-only exercise table for preview
+- [lib/types.ts](lib/types.ts) — Zod schemas and TypeScript types (Exercise, WorkoutPlan)
+- [lib/storage.ts](lib/storage.ts) — LocalStorage abstraction layer
+- [lib/use-local-storage-plans.ts](lib/use-local-storage-plans.ts) — Reactive plans hook (useSyncExternalStore)
+- [package.json](package.json) — Next.js 16, React 19, Tailwind v4, React Hook Form, Zod 4
 - [tsconfig.json](tsconfig.json) — Strict TS, `@/*` path alias
 
 ---
@@ -158,44 +168,47 @@ Build the plan detail page with preview mode (read-only view) and edit mode (ful
 
 ### Steps
 
-- [ ] **3.1 Build preview mode page**
+- [x] **3.1 Build preview mode page**
   - Edit `app/plan/[id]/page.tsx`:
-    - Fetch plan by ID from `StorageService`
-    - Display plan name as heading
-    - "Edit" button (links to `/plan/[id]/edit`) and "Workout" button (links to `/plan/[id]/workout`)
-    - Read-only table: exercise name, weight, reps
-    - Handle "plan not found" — redirect to `/` or show error
+    - Fetches plan by ID from `StorageService`
+    - Displays plan name as heading with back button
+    - "Start Workout" button (links to `/plan/[id]/workout`) and "Edit" button (links to `/plan/[id]/edit`)
+    - Read-only exercise table: exercise name, weight (with "kg" unit), reps
+    - Shows "Plan Not Found" error page with "Back to Plans" link for invalid IDs
+    - Uses `use(params)` for Next.js 16 async params
 
-- [ ] **3.2 Build the exercise table component**
-  - Create `components/exercise-table.tsx`:
-    - Shared table component used by preview, edit, and workout modes
-    - Props control which columns are visible and whether cells are editable
-    - Uses shadcn `Table` components
+- [x] **3.2 Build the exercise table component**
+  - Created `components/exercise-table.tsx`:
+    - Read-only table component for preview mode using shadcn `Table` components
+    - Columns: Exercise name, Weight (with "kg" suffix), Reps
+    - Empty state message when no exercises exist
     - Mobile-optimized column widths
 
-- [ ] **3.3 Build edit mode page**
+- [x] **3.3 Build edit mode page**
   - Edit `app/plan/[id]/edit/page.tsx`:
     - Editable plan name input at the top
-    - Exercise table with all cells editable (inline inputs for name, weight, reps)
-    - "Add Exercise" button to append a new empty row
-    - "Save" button — validates and saves to `StorageService`, navigates to preview
-    - "Reset" button — reverts all changes to last saved state
-    - Delete row button (X icon) on each row
+    - Uses shared `PlanForm` component with `initialPlan` prop
+    - "Save Changes" button validates and saves to `StorageService`, navigates to preview
+    - Shows "Plan Not Found" error for invalid IDs
+    - Back button navigates to plan detail
 
-- [ ] **3.4 Build create plan page**
+- [x] **3.4 Build create plan page**
   - Edit `app/plan/create/page.tsx`:
-    - Same UI as edit mode but starts with empty plan
+    - Uses shared `PlanForm` component without `initialPlan` (starts empty)
     - On save: generates new UUID, saves plan, redirects to `/plan/[id]`
-    - Reuse the edit mode form component to avoid duplication
+    - Back button navigates to home page
 
-- [ ] **3.5 Extract shared plan form component**
-  - Create `components/plan-form.tsx`:
+- [x] **3.5 Extract shared plan form component**
+  - Created `components/plan-form.tsx`:
     - Shared between edit and create pages
-    - Uses React Hook Form with `useFieldArray` for the dynamic exercise rows
+    - Uses React Hook Form with `useFieldArray` for dynamic exercise rows
+    - Zod validation via `@hookform/resolvers` (plan name required, exercise name required, weight >= 0, reps >= 1)
+    - Uses `z.number()` (not `z.coerce.number()`) with `valueAsNumber` register option for Zod 4 compatibility
     - Accepts `initialPlan` prop (empty for create, existing for edit) as `defaultValues`
-    - Handles validation (plan name required, at least one exercise)
     - "Reset" uses React Hook Form's `reset()` to revert to `defaultValues`
     - Emits `onSave(plan: WorkoutPlan)` callback via `handleSubmit`
+    - Delete row button (X icon) disabled when only one exercise remains
+    - Installed `@hookform/resolvers` as new dependency
 
 ### Verification
 
