@@ -4,7 +4,7 @@
 
 A mobile-first MVP for gym trainers to manage workout plans and track exercises during sessions. The app uses a dark theme (black background, white text, red accents) and stores data in LocalStorage behind an abstraction layer.
 
-**Tech stack:** Next.js 16 (App Router), Tailwind CSS v4, shadcn/ui, React Hook Form, TypeScript, LocalStorage.
+**Tech stack:** Next.js 16 (App Router), Tailwind CSS v4, shadcn/ui, React Hook Form, Zod, TypeScript, LocalStorage.
 
 **Routing:**
 - `/` — Workout plan list
@@ -112,27 +112,27 @@ Build the main landing page with a mobile-optimized table showing all workout pl
 
 ### Steps
 
-- [ ] **2.1 Build the plan list page**
+- [x] **2.1 Build the plan list page**
   - Edit `app/page.tsx`:
     - "New Plan" button at the top (links to `/plan/create`)
     - Styled with primary red color
-  - Add a hook to fetch plans from `StorageService` on render (client component with `useEffect` + `useState`)
+  - Added `lib/use-local-storage-plans.ts` hook using `useSyncExternalStore` to reactively read plans from LocalStorage (avoids lint issues with `setState` in effects)
 
-- [ ] **2.2 Build the plans table**
+- [x] **2.2 Build the plans table**
   - Create `components/plan-list-table.tsx`:
     - Mobile-optimized table using shadcn `Table` components
     - Columns: Plan name (clickable, links to `/plan/[id]`), "Start" button (links to `/plan/[id]/workout`), three-dot menu
     - The "Start" button should be compact/icon-style for mobile
     - Three-dot menu uses shadcn `DropdownMenu` with "Edit" ( link to plan detail in edit mode ) and "Delete" options
 
-- [ ] **2.3 Implement delete functionality**
+- [x] **2.3 Implement delete functionality**
   - "Delete" from dropdown calls `StorageService.deletePlan(id)` and refreshes the list
   - Add a confirmation dialog using shadcn `Dialog` before deleting
 
-- [ ] **2.4 Handle empty state**
+- [x] **2.4 Handle empty state**
   - When no plans exist, show a friendly message and prominent "Create your first plan" button
 
-- [ ] **2.5 Mobile optimization**
+- [x] **2.5 Mobile optimization**
   - Ensure table doesn't overflow on small screens
   - Use compact padding, appropriate font sizes
   - "Start" button and three-dot menu should be touch-friendly (min 44px tap targets)

@@ -3,4 +3,4 @@ allowed-tools: Bash(git add:*), Bash(git status:*), Bash(git commit:*), mcp__pla
 ---
 
 Implement phase $1 of @.ai/implementation-plan.md.
-After you're done with the implementation, reflect your progress in the implementation plan document.
+After you're done with the implementation, reflect your progress in the implementation plan document. UI changes always test with Playwright MPC

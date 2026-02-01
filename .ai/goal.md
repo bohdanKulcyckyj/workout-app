@@ -50,6 +50,7 @@ I would like to use dark theme with black-ish background, white and red as text 
 - Shadcn
 - LocalStorage ( lets start with just local storage but lets implement the way it is simple to swap for backend api calls later etc.)
 - React Hook Form
+- Zod (schema validation for data parsed from LocalStorage, form validation, etc.)
 
 ## UI validation
 
