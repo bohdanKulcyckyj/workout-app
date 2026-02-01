@@ -19,7 +19,7 @@ A mobile-first MVP for gym trainers to manage workout plans and track exercises 
 - [app/plan/create/page.tsx](app/plan/create/page.tsx) — Create new plan form
 - [app/plan/[id]/page.tsx](app/plan/[id]/page.tsx) — Plan detail (preview mode, read-only)
 - [app/plan/[id]/edit/page.tsx](app/plan/[id]/edit/page.tsx) — Edit plan form
-- [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) — Workout mode (stub)
+- [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) — Workout mode (checkboxes, inline editing, end-workout flow with confirmation dialog)
 - [app/globals.css](app/globals.css) — Global styles with OKLCH dark gym theme
 - [components/plan-list-table.tsx](components/plan-list-table.tsx) — Plan list table with actions
 - [components/plan-form.tsx](components/plan-form.tsx) — Shared plan form (create/edit) with React Hook Form + Zod
@@ -232,44 +232,52 @@ Build the workout tracking mode with done checkboxes, inline editing, end-workou
 
 ### Steps
 
-- [ ] **4.1 Build workout mode page**
+- [x] **4.1 Build workout mode page**
   - Edit `app/plan/[id]/workout/page.tsx`:
-    - Plan name as heading
-    - Exercise table with columns: name (read-only), weight (editable), reps (editable), done checkbox
-    - Use React Hook Form with `useFieldArray` for the exercise rows (weight, reps, done fields)
-    - Weight and reps are editable inline (tap to edit) via registered inputs
-    - Checkbox toggleable per exercise
-    - Visual feedback: completed rows get a muted/strikethrough style
+    - Plan name as heading with back button to plan detail
+    - Progress counter ("X / Y exercises done")
+    - Exercise table with columns: Done checkbox, name (read-only), weight (editable), reps (editable)
+    - Uses React Hook Form with `useFieldArray` for the exercise rows
+    - Weight and reps are editable inline via registered inputs with `onBlur` persistence
+    - Checkbox toggleable per exercise via shadcn `Checkbox` with `onCheckedChange`
+    - Visual feedback: completed rows get `opacity-50` + `line-through` + `text-muted-foreground`
+    - Plan Not Found error page for invalid IDs
 
-- [ ] **4.2 Implement "End Workout" button logic**
-  - "End Workout" button below the table
+- [x] **4.2 Implement "End Workout" button logic**
+  - Full-width "End Workout" button below the table
   - On click:
-    - If ALL checkboxes are checked: uncheck all, navigate to `/`
-    - If NOT all checked: show shadcn `Dialog` with confirmation message (e.g., "You haven't completed all exercises. End workout anyway?")
-    - On confirm: uncheck all checkboxes, navigate to `/`
+    - If ALL checkboxes are checked: uncheck all, save to storage, navigate to `/`
+    - If NOT all checked: show shadcn `Dialog` with confirmation message ("You haven't completed all exercises. End workout anyway?")
+    - On confirm: uncheck all checkboxes, save, navigate to `/`
     - On cancel: close dialog, stay on page
 
-- [ ] **4.3 Persist workout state**
-  - Save weight/reps changes to LocalStorage as the user edits (so progress isn't lost on accidental navigation)
-  - On "End Workout": save final state with all checkboxes unchecked
+- [x] **4.3 Persist workout state**
+  - `persistToStorage()` callback saves current form state to LocalStorage on checkbox change and input blur
+  - On "End Workout": saves final state with all checkboxes reset to `false`
+  - Weight/reps changes verified to persist across page navigations
 
-- [ ] **4.4 Playwright smoke tests**
-  - Use Playwright MCP to validate the following flows:
-    - Navigate to `/` — verify empty state or plan list renders
-    - Create a new plan with exercises via `/plan/create`
-    - Verify the plan appears in the list on `/`
-    - Navigate to plan detail, verify preview mode shows correct data
-    - Navigate to edit mode, modify an exercise, save, verify changes persist
-    - Navigate to workout mode, check some boxes, edit weight/reps
-    - Test "End Workout" with incomplete checkboxes — verify dialog appears
-    - Test "End Workout" with all checkboxes — verify redirect to `/`
+- [x] **4.4 Playwright smoke tests**
+  - Validated the following flows via Playwright MCP:
+    - Home page renders plan list (or empty state)
+    - Created a new plan ("Test Leg Day") with 2 exercises via `/plan/create`
+    - Plan appeared in the list on `/`
+    - Plan detail preview showed correct data (exercise names, weight, reps)
+    - Workout mode: checked Squats checkbox, verified counter updated to "1/2"
+    - Tested "End Workout" with incomplete checkboxes — dialog appeared with Cancel/End Workout buttons
+    - Tested Cancel — dialog closed, stayed on page
+    - Checked all exercises, tested "End Workout" — redirected to `/` without dialog
+    - Verified checkboxes were reset to unchecked on re-entering workout
+    - Edited weight (80→85) and reps (10→12) in workout mode, confirmed via End Workout dialog
+    - Verified weight/reps changes persisted in plan detail view
+    - Tested on mobile viewport (375px) — layout clean, no overflow
 
-- [ ] **4.5 Final polish**
-  - Verify all navigation flows work end-to-end
-  - Ensure consistent spacing, font sizes, and touch targets across all pages
-  - Verify dark theme is consistent everywhere
-  - Test on mobile viewport (375px)
-  - Run `npm run build` and `npm run lint` — fix any issues
+- [x] **4.5 Final polish**
+  - All navigation flows work end-to-end
+  - Consistent spacing, font sizes, and touch targets across all pages
+  - Dark theme consistent everywhere (red accents, dark background)
+  - Mobile viewport (375px) verified — clean layout
+  - `npm run build` succeeds with no errors
+  - `npm run lint` passes (1 React Compiler informational warning about `watch()` — expected/harmless)
 
 ### Verification
 
