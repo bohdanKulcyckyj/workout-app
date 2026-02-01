@@ -28,12 +28,12 @@ Initialize shadcn with a dark/red gym theme, define data types, build the LocalS
 
 ### Steps
 
-- [ ] **1.1 Initialize shadcn/ui**
+- [x] **1.1 Initialize shadcn/ui**
   - Run `npx shadcn@latest init` with dark mode, neutral base, red as primary accent
   - This creates `components.json` and a `components/ui/` directory
   - Verify `components.json` exists and [app/globals.css](app/globals.css) is updated with shadcn CSS variables
 
-- [ ] **1.2 Customize the dark gym theme**
+- [x] **1.2 Customize the dark gym theme**
   - Edit [app/globals.css](app/globals.css) to set up a forced dark theme (no light mode toggle needed):
     - Background: near-black (`#0a0a0a` / `hsl(0 0% 3.9%)`)
     - Foreground: white/off-white
@@ -42,7 +42,7 @@ Initialize shadcn with a dark/red gym theme, define data types, build the LocalS
   - Remove the `prefers-color-scheme` media query — always dark
   - Add `dark` class to `<html>` in [app/layout.tsx](app/layout.tsx)
 
-- [ ] **1.3 Define TypeScript types**
+- [x] **1.3 Define TypeScript types**
   - Create `lib/types.ts` with:
     ```ts
     export interface Exercise {
@@ -62,7 +62,7 @@ Initialize shadcn with a dark/red gym theme, define data types, build the LocalS
     }
     ```
 
-- [ ] **1.4 Build LocalStorage service**
+- [x] **1.4 Build LocalStorage service**
   - Create `lib/storage.ts` with an abstraction layer:
     ```ts
     export interface StorageService {
@@ -76,7 +76,7 @@ Initialize shadcn with a dark/red gym theme, define data types, build the LocalS
   - Use a single key `"workout-plans"` storing a JSON array
   - Export a default instance for easy swapping later
 
-- [ ] **1.5 Set up app shell and routing**
+- [x] **1.5 Set up app shell and routing**
   - Update [app/layout.tsx](app/layout.tsx):
     - Change metadata title/description to "Workout App"
     - Add mobile viewport meta
@@ -88,10 +88,10 @@ Initialize shadcn with a dark/red gym theme, define data types, build the LocalS
     - `app/plan/[id]/edit/page.tsx` — Edit mode
     - `app/plan/[id]/workout/page.tsx` — Workout mode
 
-- [ ] **1.6 Install required shadcn components**
+- [x] **1.6 Install required shadcn components**
   - Install base components needed across phases: `button`, `table`, `input`, `checkbox`, `dialog`, `dropdown-menu`
 
-- [ ] **1.7 Install React Hook Form**
+- [x] **1.7 Install React Hook Form**
   - Run `npm install react-hook-form`
   - Will be used for the plan edit/create forms and inline editing in workout mode
 
