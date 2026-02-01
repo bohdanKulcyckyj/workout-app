@@ -4,12 +4,7 @@ import Link from "next/link";
 import { Play, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { WorkoutPlan } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,7 +43,8 @@ export function PlanListTable({ plans, onDelete }: PlanListTableProps) {
                   {plan.name}
                 </Link>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {plan.exercises.length} exercise{plan.exercises.length !== 1 ? "s" : ""}
+                  {plan.exercises.length} exercise
+                  {plan.exercises.length !== 1 ? "s" : ""}
                 </p>
               </TableCell>
               <TableCell className="text-right pr-0 w-[100px]">
@@ -61,7 +57,7 @@ export function PlanListTable({ plans, onDelete }: PlanListTableProps) {
                   >
                     <Link href={`/plan/${plan.id}/workout`}>
                       <Play className="size-4" />
-                      <span className="sr-only">Start workout</span>
+                      <span className="sr-only">Start</span>
                     </Link>
                   </Button>
                   <DropdownMenu>
@@ -69,7 +65,7 @@ export function PlanListTable({ plans, onDelete }: PlanListTableProps) {
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        className="min-w-[32px] min-h-[32px]"
+                        className="min-w-[32px] min-h-[32px] cursor-pointer"
                       >
                         <MoreVertical className="size-4" />
                         <span className="sr-only">Open menu</span>
@@ -77,7 +73,10 @@ export function PlanListTable({ plans, onDelete }: PlanListTableProps) {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem asChild>
-                        <Link href={`/plan/${plan.id}/edit`}>
+                        <Link
+                          href={`/plan/${plan.id}/edit`}
+                          className="cursor-pointer"
+                        >
                           <Pencil />
                           Edit
                         </Link>
@@ -85,6 +84,7 @@ export function PlanListTable({ plans, onDelete }: PlanListTableProps) {
                       <DropdownMenuItem
                         variant="destructive"
                         onClick={() => setDeleteTarget(plan)}
+                        className="cursor-pointer"
                       >
                         <Trash2 />
                         Delete
@@ -114,12 +114,14 @@ export function PlanListTable({ plans, onDelete }: PlanListTableProps) {
           </DialogHeader>
           <DialogFooter>
             <Button
+              className="cursor-pointer"
               variant="outline"
               onClick={() => setDeleteTarget(null)}
             >
               Cancel
             </Button>
             <Button
+              className="cursor-pointer"
               variant="destructive"
               onClick={() => {
                 if (deleteTarget) {

@@ -31,3 +31,9 @@ export function useLocalStoragePlans() {
 
   return { plans, refresh };
 }
+
+export function useLocalStoragePlan(id: string) {
+  const { plans, refresh } = useLocalStoragePlans();
+  const plan = plans.find((p) => p.id === id) ?? null;
+  return { plan, refresh };
+}

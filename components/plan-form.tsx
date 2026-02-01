@@ -101,6 +101,7 @@ export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanForm
             type="button"
             variant="outline"
             size="sm"
+            className="cursor-pointer"
             onClick={() =>
               append({
                 id: crypto.randomUUID(),
@@ -166,7 +167,7 @@ export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanForm
                     size="icon-xs"
                     onClick={() => remove(index)}
                     disabled={fields.length === 1}
-                    className="text-muted-foreground hover:text-destructive"
+                    className="text-muted-foreground hover:text-destructive cursor-pointer"
                   >
                     <X className="size-3" />
                     <span className="sr-only">Remove exercise</span>
@@ -179,12 +180,13 @@ export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanForm
       </div>
 
       <div className="flex gap-3">
-        <Button type="submit" className="flex-1">
+        <Button type="submit" className="cursor-pointer flex-1">
           {submitLabel}
         </Button>
         <Button
           type="button"
           variant="outline"
+          className="cursor-pointer flex-1"
           onClick={() => reset(defaultValues)}
         >
           Reset

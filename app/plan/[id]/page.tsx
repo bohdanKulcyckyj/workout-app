@@ -4,7 +4,7 @@ import { use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pencil, Play, ArrowLeft } from "lucide-react";
-import { storage } from "@/lib/storage";
+import { useLocalStoragePlan } from "@/lib/use-local-storage-plans";
 import { Button } from "@/components/ui/button";
 import { ExerciseTable } from "@/components/exercise-table";
 
@@ -15,7 +15,7 @@ export default function PlanDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const plan = storage.getPlan(id);
+  const { plan } = useLocalStoragePlan(id);
 
   if (!plan) {
     return (
@@ -24,7 +24,7 @@ export default function PlanDetailPage({
         <p className="text-muted-foreground">
           This workout plan doesn&apos;t exist or has been deleted.
         </p>
-        <Button asChild>
+        <Button asChild className="cursor-pointer">
           <Link href="/">
             <ArrowLeft className="size-4" />
             Back to Plans
@@ -37,22 +37,18 @@ export default function PlanDetailPage({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => router.push("/")}
-        >
+        <Button className="cursor-pointer" variant="ghost" size="icon-sm" onClick={() => router.push("/")}>
           <ArrowLeft className="size-4" />
           <span className="sr-only">Back</span>
         </Button>
         <h1 className="text-2xl font-bold flex-1">{plan.name}</h1>
       </div>
 
-      <div className="flex gap-3">
-        <Button asChild className="flex-1">
+      <div className="flex justify-between gap-3">
+        <Button asChild>
           <Link href={`/plan/${id}/workout`}>
             <Play className="size-4" />
-            Start Workout
+            Start
           </Link>
         </Button>
         <Button variant="outline" asChild>

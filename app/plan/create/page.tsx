@@ -21,6 +21,7 @@ export default function CreatePlanPage() {
         <Button
           variant="ghost"
           size="icon-sm"
+          className="cursor-pointer"
           onClick={() => router.push("/")}
         >
           <ArrowLeft className="size-4" />
@@ -29,7 +30,7 @@ export default function CreatePlanPage() {
         <h1 className="text-2xl font-bold">Create New Plan</h1>
       </div>
 
-      <PlanForm onSave={handleSave} submitLabel="Create Plan" />
+      <PlanForm onSave={handleSave} submitLabel="Create" />
     </div>
   );
 }

@@ -22,7 +22,7 @@ export default function HomePage() {
         <Button asChild>
           <Link href="/plan/create">
             <Plus className="size-4" />
-            New Plan
+            New
           </Link>
         </Button>
       </div>
