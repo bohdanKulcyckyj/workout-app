@@ -33,7 +33,7 @@ End-to-end UI tests using **Playwright** to verify the core user flows of the wo
 
 ## Phase 1: Playwright Setup + Create & View Plan Tests
 
-- [ ] Complete
+- [x] Complete
 
 ### Steps
 
@@ -88,7 +88,7 @@ End-to-end UI tests using **Playwright** to verify the core user flows of the wo
 
 ### Verification
 - Run `npx playwright test`  all tests pass (including Phase 1 tests)
-- Edit tests verify data persists correctly through the create ’ edit ’ view cycle
+- Edit tests verify data persists correctly through the create ï¿½ edit ï¿½ view cycle
 
 ---
 
@@ -110,4 +110,4 @@ End-to-end UI tests using **Playwright** to verify the core user flows of the wo
 
 ### Verification
 - Run `npx playwright test`  all tests pass (all 3 phases)
-- Workout tests verify the full lifecycle: start ’ track ’ complete ’ reset
+- Workout tests verify the full lifecycle: start ï¿½ track ï¿½ complete ï¿½ reset
