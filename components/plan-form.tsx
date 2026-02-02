@@ -165,8 +165,18 @@ export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanForm
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    onClick={() => remove(index)}
-                    disabled={fields.length === 1}
+                    onClick={() => {
+                      remove(index);
+                      if (fields.length === 1) {
+                        append({
+                          id: crypto.randomUUID(),
+                          name: "",
+                          weight: 0,
+                          reps: 10,
+                          done: false,
+                        });
+                      }
+                    }}
                     className="text-muted-foreground hover:text-destructive cursor-pointer"
                   >
                     <X className="size-4" />
