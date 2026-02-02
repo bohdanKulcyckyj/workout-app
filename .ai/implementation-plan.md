@@ -1,295 +1,89 @@
-# Implementation Plan - Workout App
+# UI Design Improvements  Implementation Plan
 
 ## Overview
 
-A mobile-first MVP for gym trainers to manage workout plans and track exercises during sessions. The app uses a dark theme (black background, white text, red accents) and stores data in LocalStorage behind an abstraction layer.
-
-**Tech stack:** Next.js 16 (App Router), Tailwind CSS v4, shadcn/ui, React Hook Form, Zod, TypeScript, LocalStorage.
-
-**Routing:**
-- `/` — Workout plan list
-- `/plan/create` — Create new plan (dedicated route)
-- `/plan/[id]` — Plan detail (preview mode)
-- `/plan/[id]/edit` — Edit mode
-- `/plan/[id]/workout` — Workout mode
-
-**Key files (current state):**
-- [app/layout.tsx](app/layout.tsx) — Root layout (Geist fonts, dark mode, max-w-lg container)
-- [app/page.tsx](app/page.tsx) — Home page (plan list with empty state)
-- [app/plan/create/page.tsx](app/plan/create/page.tsx) — Create new plan form
-- [app/plan/[id]/page.tsx](app/plan/[id]/page.tsx) — Plan detail (preview mode, read-only)
-- [app/plan/[id]/edit/page.tsx](app/plan/[id]/edit/page.tsx) — Edit plan form
-- [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) — Workout mode (checkboxes, inline editing, end-workout flow with confirmation dialog)
-- [app/globals.css](app/globals.css) — Global styles with OKLCH dark gym theme
-- [components/plan-list-table.tsx](components/plan-list-table.tsx) — Plan list table with actions
-- [components/plan-form.tsx](components/plan-form.tsx) — Shared plan form (create/edit) with React Hook Form + Zod
-- [components/exercise-table.tsx](components/exercise-table.tsx) — Read-only exercise table for preview
-- [lib/types.ts](lib/types.ts) — Zod schemas and TypeScript types (Exercise, WorkoutPlan)
-- [lib/storage.ts](lib/storage.ts) — LocalStorage abstraction layer
-- [lib/use-local-storage-plans.ts](lib/use-local-storage-plans.ts) — Reactive plans hook (useSyncExternalStore)
-- [package.json](package.json) — Next.js 16, React 19, Tailwind v4, React Hook Form, Zod 4
-- [tsconfig.json](tsconfig.json) — Strict TS, `@/*` path alias
+Fix 6 mobile UI inconveniences across the workout app: undersized buttons, cramped spacing, small checkboxes, small back arrows, weight input layout shift, and uneven form column widths. All size increases target 36px (`size-9` / `icon`) for consistency.
 
 ---
 
-## Phase 1: Foundation (Project Setup, Types, Storage, Routing, Theme)
+## Phase 1: Plan List Page  Button Sizes & Spacing
 
-Initialize shadcn with a dark/red gym theme, define data types, build the LocalStorage abstraction, and set up the app shell with routing.
+**Goal:** Make all interactive elements on the plan list page comfortably tappable on mobile.
 
-### Steps
+**Files:**
+- [app/page.tsx](app/page.tsx)  "New" button (lines 22-27)
+- [components/plan-list-table.tsx](components/plan-list-table.tsx)  Play button (lines 52-62), three-dots button (lines 64-73), dropdown menu items
 
-- [x] **1.1 Initialize shadcn/ui**
-  - Run `npx shadcn@latest init` with dark mode, neutral base, red as primary accent
-  - This creates `components.json` and a `components/ui/` directory
-  - Verify `components.json` exists and [app/globals.css](app/globals.css) is updated with shadcn CSS variables
+**Changes:**
 
-- [x] **1.2 Customize the dark gym theme**
-  - Edit [app/globals.css](app/globals.css) to set up a forced dark theme (no light mode toggle needed):
-    - Background: near-black (`#0a0a0a` / `hsl(0 0% 3.9%)`)
-    - Foreground: white/off-white
-    - Primary: gym red (`hsl(0 72% 51%)` / `#dc2626` range)
-    - Muted, card, border: dark grays
-  - Remove the `prefers-color-scheme` media query — always dark
-  - Add `dark` class to `<html>` in [app/layout.tsx](app/layout.tsx)
+1. **"New" button** in `app/page.tsx`: Currently default size (`h-9`). Increase to `size="lg"` or add min-height/padding so it's comfortable on mobile.
 
-- [x] **1.3 Define TypeScript types**
-  - Create `lib/types.ts` with:
-    ```ts
-    export interface Exercise {
-      id: string;        // crypto.randomUUID()
-      name: string;
-      weight: number;
-      reps: number;
-      done: boolean;
-    }
+2. **Play (start workout) button** in `plan-list-table.tsx`: Change `size="icon-sm"` (32px) � `size="icon"` (36px). Update `min-w-[32px] min-h-[32px]` � `min-w-[36px] min-h-[36px]`.
 
-    export interface WorkoutPlan {
-      id: string;        // crypto.randomUUID()
-      name: string;
-      exercises: Exercise[];
-      createdAt: string; // ISO date
-      updatedAt: string; // ISO date
-    }
-    ```
+3. **Three-dots (more) button** in `plan-list-table.tsx`: Change `size="icon-sm"` � `size="icon"`.
 
-- [x] **1.4 Build LocalStorage service**
-  - Create `lib/storage.ts` with an abstraction layer:
-    ```ts
-    export interface StorageService {
-      getPlans(): WorkoutPlan[];
-      getPlan(id: string): WorkoutPlan | null;
-      savePlan(plan: WorkoutPlan): void;
-      deletePlan(id: string): void;
-    }
-    ```
-  - Implement `LocalStorageService` class that implements this interface
-  - Use a single key `"workout-plans"` storing a JSON array
-  - Export a default instance for easy swapping later
+4. **Spacing between play and three-dots buttons**: Add `gap-2` to the button container cell. Widen the cell from `w-[100px]` to accommodate the larger buttons + gap.
 
-- [x] **1.5 Set up app shell and routing**
-  - Update [app/layout.tsx](app/layout.tsx):
-    - Change metadata title/description to "Workout App"
-    - Add mobile viewport meta
-    - Set max-width container, padding for mobile
-  - Create route files (empty shells with basic headings):
-    - `app/page.tsx` — Plan list (replace default content)
-    - `app/plan/create/page.tsx` — Create new plan
-    - `app/plan/[id]/page.tsx` — Plan detail (preview)
-    - `app/plan/[id]/edit/page.tsx` — Edit mode
-    - `app/plan/[id]/workout/page.tsx` — Workout mode
+5. **Dropdown menu items** (Edit, Delete): These inherit from shadcn defaults which are already reasonable, but verify they have comfortable padding.
 
-- [x] **1.6 Install required shadcn components**
-  - Install base components needed across phases: `button`, `table`, `input`, `checkbox`, `dialog`, `dropdown-menu`
-
-- [x] **1.7 Install React Hook Form**
-  - Run `npm install react-hook-form`
-  - Will be used for the plan edit/create forms and inline editing in workout mode
-
-### Verification
-
-- `npm run build` succeeds with no errors
-- `npm run lint` passes
-- Dev server starts and shows basic page shells at each route
-- `components.json` exists, `components/ui/` has installed components
-- Dark theme is visible — black background, white text
-- `lib/types.ts` and `lib/storage.ts` exist and export correctly
+**Verification:**
+- [ ] "New" button is comfortably tappable on mobile (min 36px height)
+- [ ] Play and three-dots buttons are 36px each
+- [ ] There is visible spacing between play and three-dots buttons
+- [ ] Dropdown items (Edit, Delete) are easy to tap
+- [ ] Layout doesn't overflow on small screens (320px width)
 
 ---
 
-## Phase 2: Workout Plan List Page
+## Phase 2: Workout Checkboxes & Back Arrows (All Pages)
 
-Build the main landing page with a mobile-optimized table showing all workout plans, action menus, and navigation.
+**Goal:** Increase checkbox size globally and increase back arrow buttons to 36px on all pages.
 
-### Steps
+**Files:**
+- [components/ui/checkbox.tsx](components/ui/checkbox.tsx)  Global checkbox size (line 16-18)
+- [app/plan/[id]/workout/page.tsx](app/plan/%5Bid%5D/workout/page.tsx)  Back arrow (lines 123-130), checkbox column header width
+- [app/plan/[id]/page.tsx](app/plan/%5Bid%5D/page.tsx)  Back arrow (lines 40-42)
+- [app/plan/[id]/edit/page.tsx](app/plan/%5Bid%5D/edit/page.tsx)  Back arrow
+- [app/plan/create/page.tsx](app/plan/create/page.tsx)  Back arrow
 
-- [x] **2.1 Build the plan list page**
-  - Edit `app/page.tsx`:
-    - "New Plan" button at the top (links to `/plan/create`)
-    - Styled with primary red color
-  - Added `lib/use-local-storage-plans.ts` hook using `useSyncExternalStore` to reactively read plans from LocalStorage (avoids lint issues with `setState` in effects)
+**Changes:**
 
-- [x] **2.2 Build the plans table**
-  - Create `components/plan-list-table.tsx`:
-    - Mobile-optimized table using shadcn `Table` components
-    - Columns: Plan name (clickable, links to `/plan/[id]`), "Start" button (links to `/plan/[id]/workout`), three-dot menu
-    - The "Start" button should be compact/icon-style for mobile
-    - Three-dot menu uses shadcn `DropdownMenu` with "Edit" ( link to plan detail in edit mode ) and "Delete" options
+1. **Checkbox component** (`components/ui/checkbox.tsx`): Increase root from `size-4` (16px) � `size-5` (20px). Increase CheckIcon from `size-3.5` � `size-4`.
 
-- [x] **2.3 Implement delete functionality**
-  - "Delete" from dropdown calls `StorageService.deletePlan(id)` and refreshes the list
-  - Add a confirmation dialog using shadcn `Dialog` before deleting
+2. **Back arrow buttons on all 4 pages**: Change `size="icon-sm"` � `size="icon"`. Change ArrowLeft icon from `size-4` � `size-5` for visual balance.
 
-- [x] **2.4 Handle empty state**
-  - When no plans exist, show a friendly message and prominent "Create your first plan" button
+3. **Workout page checkbox column**: Widen `w-[40px]` � `w-[48px]` on the "Done" column header to accommodate the larger checkbox.
 
-- [x] **2.5 Mobile optimization**
-  - Ensure table doesn't overflow on small screens
-  - Use compact padding, appropriate font sizes
-  - "Start" button and three-dot menu should be touch-friendly (min 44px tap targets)
-
-### Verification
-
-- Plan list page renders at `/`
-- "New Plan" button navigates to `/plan/create`
-- Plans from LocalStorage are displayed in the table
-- Clicking plan name navigates to `/plan/[id]`
-- "Start" button navigates to `/plan/[id]/workout`
-- Three-dot menu opens with "Edit" and "Delete" options
-- "Edit" navigates to `/plan/[id]/edit`
-- "Delete" shows confirmation dialog, then removes the plan
-- Empty state is shown when no plans exist
-- Layout looks good on a 375px-wide viewport (mobile)
+**Verification:**
+- [ ] Checkboxes in workout mode are visibly larger and easy to tap
+- [ ] Back arrow is 36px on: plan detail, edit, create, and workout pages
+- [ ] Arrow icon is visually balanced within the larger button
+- [ ] Checkbox column doesn't clip or cause layout issues
 
 ---
 
-## Phase 3: Plan Detail — Preview & Edit Modes
+## Phase 3: Plan Form  Weight Input Offset & Column Widths
 
-Build the plan detail page with preview mode (read-only view) and edit mode (full CRUD on exercises), plus the create-new-plan flow.
+**Goal:** Fix the weight input layout jump on typing, equalize weight/reps column widths, and increase the delete (X) button size.
 
-### Steps
+**Files:**
+- [components/plan-form.tsx](components/plan-form.tsx)  Exercise table (lines 124-179), column widths, delete button
+- [components/exercise-table.tsx](components/exercise-table.tsx)  Read-only exercise table column widths (keep consistent)
 
-- [x] **3.1 Build preview mode page**
-  - Edit `app/plan/[id]/page.tsx`:
-    - Fetches plan by ID from `StorageService`
-    - Displays plan name as heading with back button
-    - "Start Workout" button (links to `/plan/[id]/workout`) and "Edit" button (links to `/plan/[id]/edit`)
-    - Read-only exercise table: exercise name, weight (with "kg" unit), reps
-    - Shows "Plan Not Found" error page with "Back to Plans" link for invalid IDs
-    - Uses `use(params)` for Next.js 16 async params
+**Changes:**
 
-- [x] **3.2 Build the exercise table component**
-  - Created `components/exercise-table.tsx`:
-    - Read-only table component for preview mode using shadcn `Table` components
-    - Columns: Exercise name, Weight (with "kg" suffix), Reps
-    - Empty state message when no exercises exist
-    - Mobile-optimized column widths
+1. **Weight input offset bug**: The layout shift when typing in the weight field is caused by the number input spinner arrows appearing/disappearing. Fix by adding CSS to hide the native number input spinners (`appearance: textfield` / `::-webkit-inner-spin-button` / `::-webkit-outer-spin-button` display none). Add this to `globals.css` or as a Tailwind utility so it applies to all number inputs.
 
-- [x] **3.3 Build edit mode page**
-  - Edit `app/plan/[id]/edit/page.tsx`:
-    - Editable plan name input at the top
-    - Uses shared `PlanForm` component with `initialPlan` prop
-    - "Save Changes" button validates and saves to `StorageService`, navigates to preview
-    - Shows "Plan Not Found" error for invalid IDs
-    - Back button navigates to plan detail
+2. **Equalize column widths**: Change Weight and Reps columns to both be `w-[72px]` (equal width, slightly adjusted from current 80/60 split). Update in both:
+   - `components/plan-form.tsx`  form table headers
+   - `components/exercise-table.tsx`  read-only table headers
+   - `app/plan/[id]/workout/page.tsx`  workout mode table headers
 
-- [x] **3.4 Build create plan page**
-  - Edit `app/plan/create/page.tsx`:
-    - Uses shared `PlanForm` component without `initialPlan` (starts empty)
-    - On save: generates new UUID, saves plan, redirects to `/plan/[id]`
-    - Back button navigates to home page
+3. **Delete (X) button**: Change from `size="icon-xs"` (24px) � `size="icon-sm"` (32px). Change X icon from `size-3` � `size-4`. Widen the delete column header from `w-[40px]` � `w-[44px]`.
 
-- [x] **3.5 Extract shared plan form component**
-  - Created `components/plan-form.tsx`:
-    - Shared between edit and create pages
-    - Uses React Hook Form with `useFieldArray` for dynamic exercise rows
-    - Zod validation via `@hookform/resolvers` (plan name required, exercise name required, weight >= 0, reps >= 1)
-    - Uses `z.number()` (not `z.coerce.number()`) with `valueAsNumber` register option for Zod 4 compatibility
-    - Accepts `initialPlan` prop (empty for create, existing for edit) as `defaultValues`
-    - "Reset" uses React Hook Form's `reset()` to revert to `defaultValues`
-    - Emits `onSave(plan: WorkoutPlan)` callback via `handleSubmit`
-    - Delete row button (X icon) disabled when only one exercise remains
-    - Installed `@hookform/resolvers` as new dependency
-
-### Verification
-
-- Preview page at `/plan/[id]` shows plan name and exercise table
-- "Edit" and "Workout" buttons navigate correctly
-- Edit page at `/plan/[id]/edit` loads existing plan data into editable fields
-- All cells are editable (name, weight, reps)
-- "Add Exercise" adds a new row
-- "Save" persists changes to LocalStorage and navigates to preview
-- "Reset" reverts to last saved state
-- Create page at `/plan/create` starts empty
-- Saving a new plan generates a UUID and redirects to the plan detail
-- Non-existent plan IDs are handled gracefully
-- All pages look good on mobile (375px viewport)
-
----
-
-## Phase 4: Workout Mode & Playwright Validation
-
-Build the workout tracking mode with done checkboxes, inline editing, end-workout flow with confirmation, and automated Playwright tests.
-
-### Steps
-
-- [x] **4.1 Build workout mode page**
-  - Edit `app/plan/[id]/workout/page.tsx`:
-    - Plan name as heading with back button to plan detail
-    - Progress counter ("X / Y exercises done")
-    - Exercise table with columns: Done checkbox, name (read-only), weight (editable), reps (editable)
-    - Uses React Hook Form with `useFieldArray` for the exercise rows
-    - Weight and reps are editable inline via registered inputs with `onBlur` persistence
-    - Checkbox toggleable per exercise via shadcn `Checkbox` with `onCheckedChange`
-    - Visual feedback: completed rows get `opacity-50` + `line-through` + `text-muted-foreground`
-    - Plan Not Found error page for invalid IDs
-
-- [x] **4.2 Implement "End Workout" button logic**
-  - Full-width "End Workout" button below the table
-  - On click:
-    - If ALL checkboxes are checked: uncheck all, save to storage, navigate to `/`
-    - If NOT all checked: show shadcn `Dialog` with confirmation message ("You haven't completed all exercises. End workout anyway?")
-    - On confirm: uncheck all checkboxes, save, navigate to `/`
-    - On cancel: close dialog, stay on page
-
-- [x] **4.3 Persist workout state**
-  - `persistToStorage()` callback saves current form state to LocalStorage on checkbox change and input blur
-  - On "End Workout": saves final state with all checkboxes reset to `false`
-  - Weight/reps changes verified to persist across page navigations
-
-- [x] **4.4 Playwright smoke tests**
-  - Validated the following flows via Playwright MCP:
-    - Home page renders plan list (or empty state)
-    - Created a new plan ("Test Leg Day") with 2 exercises via `/plan/create`
-    - Plan appeared in the list on `/`
-    - Plan detail preview showed correct data (exercise names, weight, reps)
-    - Workout mode: checked Squats checkbox, verified counter updated to "1/2"
-    - Tested "End Workout" with incomplete checkboxes — dialog appeared with Cancel/End Workout buttons
-    - Tested Cancel — dialog closed, stayed on page
-    - Checked all exercises, tested "End Workout" — redirected to `/` without dialog
-    - Verified checkboxes were reset to unchecked on re-entering workout
-    - Edited weight (80→85) and reps (10→12) in workout mode, confirmed via End Workout dialog
-    - Verified weight/reps changes persisted in plan detail view
-    - Tested on mobile viewport (375px) — layout clean, no overflow
-
-- [x] **4.5 Final polish**
-  - All navigation flows work end-to-end
-  - Consistent spacing, font sizes, and touch targets across all pages
-  - Dark theme consistent everywhere (red accents, dark background)
-  - Mobile viewport (375px) verified — clean layout
-  - `npm run build` succeeds with no errors
-  - `npm run lint` passes (1 React Compiler informational warning about `watch()` — expected/harmless)
-
-### Verification
-
-- Workout mode at `/plan/[id]/workout` shows exercises with checkboxes
-- Weight and reps are editable inline
-- Checking a box visually marks the exercise as done
-- "End Workout" with all checked: unchecks all, redirects to `/`
-- "End Workout" with some unchecked: shows confirmation dialog
-- Dialog confirm: unchecks all, redirects to `/`
-- Dialog cancel: stays on page
-- Weight/reps changes persist in LocalStorage
-- All Playwright tests pass
-- `npm run build` succeeds
-- `npm run lint` passes
-- App works correctly on mobile viewport
+**Verification:**
+- [ ] Typing in weight input no longer causes layout shift
+- [ ] Weight and Reps columns are visually the same width
+- [ ] Delete (X) button is comfortably tappable
+- [ ] Table still fits on small screens without horizontal scroll
+- [ ] Read-only exercise table column widths match the form table

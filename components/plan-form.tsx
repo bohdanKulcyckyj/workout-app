@@ -125,9 +125,9 @@ export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanForm
           <TableHeader>
             <TableRow>
               <TableHead className="pl-0">Name</TableHead>
-              <TableHead className="w-[80px]">Weight</TableHead>
-              <TableHead className="w-[60px]">Reps</TableHead>
-              <TableHead className="w-[40px] pr-0"></TableHead>
+              <TableHead className="w-[72px]">Weight</TableHead>
+              <TableHead className="w-[72px]">Reps</TableHead>
+              <TableHead className="w-[44px] pr-0"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -164,12 +164,12 @@ export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanForm
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-xs"
+                    size="icon-sm"
                     onClick={() => remove(index)}
                     disabled={fields.length === 1}
                     className="text-muted-foreground hover:text-destructive cursor-pointer"
                   >
-                    <X className="size-3" />
+                    <X className="size-4" />
                     <span className="sr-only">Remove exercise</span>
                   </Button>
                 </TableCell>

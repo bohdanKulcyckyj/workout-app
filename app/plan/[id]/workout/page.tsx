@@ -1,9 +1,10 @@
 "use client";
 
-import { use, useState, useCallback, useEffect } from "react";
+import { use, useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
+import confetti from "canvas-confetti";
 import { ArrowLeft } from "lucide-react";
 import { storage } from "@/lib/storage";
 import { useLocalStoragePlan } from "@/lib/use-local-storage-plans";
@@ -41,6 +42,7 @@ export default function WorkoutModePage({
   const router = useRouter();
   const { plan } = useLocalStoragePlan(id);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [exitDestination, setExitDestination] = useState<string>("/");
 
   const { register, control, getValues, setValue, watch, reset } =
     useForm<WorkoutFormValues>({
@@ -62,6 +64,32 @@ export default function WorkoutModePage({
   });
 
   const watchedExercises = watch("exercises");
+  const hasCelebratedRef = useRef(false);
+
+  const fireCelebration = useCallback(() => {
+    const duration = 1500;
+    const end = Date.now() + duration;
+
+    const frame = () => {
+      confetti({
+        particleCount: 3,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 0.7 },
+      });
+      confetti({
+        particleCount: 3,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 0.7 },
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    };
+    frame();
+  }, []);
 
   const persistToStorage = useCallback(() => {
     if (!plan) return;
@@ -74,18 +102,19 @@ export default function WorkoutModePage({
     });
   }, [plan, getValues]);
 
-  function handleEndWorkout() {
+  function handleExit(destination: string) {
     const exercises = getValues("exercises");
     const allDone = exercises.every((e) => e.done);
 
     if (allDone) {
-      finishWorkout();
+      finishWorkout(destination);
     } else {
+      setExitDestination(destination);
       setShowConfirmDialog(true);
     }
   }
 
-  function finishWorkout() {
+  function finishWorkout(destination?: string) {
     if (!plan) return;
     const exercises = getValues("exercises");
     const now = new Date().toISOString();
@@ -94,7 +123,7 @@ export default function WorkoutModePage({
       exercises: exercises.map((e) => ({ ...e, done: false })),
       updatedAt: now,
     });
-    router.push("/");
+    router.push(destination ?? exitDestination);
   }
 
   if (!plan) {
@@ -122,11 +151,11 @@ export default function WorkoutModePage({
       <div className="flex items-center gap-2">
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           className="cursor-pointer"
-          onClick={() => router.push(`/plan/${id}`)}
+          onClick={() => handleExit(`/plan/${id}`)}
         >
-          <ArrowLeft className="size-4" />
+          <ArrowLeft className="size-5" />
           <span className="sr-only">Back</span>
         </Button>
         <h1 className="text-2xl font-bold flex-1">{plan.name}</h1>
@@ -139,10 +168,10 @@ export default function WorkoutModePage({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[40px] pl-0">Done</TableHead>
+            <TableHead className="w-[48px] pl-0">Done</TableHead>
             <TableHead>Exercise</TableHead>
-            <TableHead className="w-[80px]">Weight</TableHead>
-            <TableHead className="w-[60px] pr-0">Reps</TableHead>
+            <TableHead className="w-[72px]">Weight</TableHead>
+            <TableHead className="w-[72px] pr-0">Reps</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -159,12 +188,21 @@ export default function WorkoutModePage({
                     onCheckedChange={(checked) => {
                       setValue(`exercises.${index}.done`, checked === true);
                       persistToStorage();
+
+                      const exercises = getValues("exercises");
+                      const allDone = exercises.every((e) => e.done);
+                      if (allDone && !hasCelebratedRef.current) {
+                        hasCelebratedRef.current = true;
+                        fireCelebration();
+                      } else if (!allDone) {
+                        hasCelebratedRef.current = false;
+                      }
                     }}
                     aria-label={`Mark ${field.name} as done`}
                   />
                 </TableCell>
                 <TableCell
-                  className={isDone ? "line-through text-muted-foreground" : "font-medium"}
+                  className={`max-w-0 truncate ${isDone ? "line-through text-muted-foreground" : "font-medium"}`}
                 >
                   {field.name}
                 </TableCell>
@@ -197,7 +235,7 @@ export default function WorkoutModePage({
         </TableBody>
       </Table>
 
-      <Button onClick={handleEndWorkout} className="w-full" size="lg">
+      <Button onClick={() => handleExit("/")} className="w-full cursor-pointer" size="lg">
         End Workout
       </Button>
 
@@ -216,7 +254,7 @@ export default function WorkoutModePage({
             >
               Cancel
             </Button>
-            <Button onClick={finishWorkout}>End Workout</Button>
+            <Button onClick={() => finishWorkout()}>End Workout</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

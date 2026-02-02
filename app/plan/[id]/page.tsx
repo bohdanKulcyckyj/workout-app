@@ -37,8 +37,8 @@ export default function PlanDetailPage({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <Button className="cursor-pointer" variant="ghost" size="icon-sm" onClick={() => router.push("/")}>
-          <ArrowLeft className="size-4" />
+        <Button className="cursor-pointer" variant="ghost" size="icon" onClick={() => router.push("/")}>
+          <ArrowLeft className="size-5" />
           <span className="sr-only">Back</span>
         </Button>
         <h1 className="text-2xl font-bold flex-1">{plan.name}</h1>

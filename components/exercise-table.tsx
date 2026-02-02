@@ -20,8 +20,8 @@ export function ExerciseTable({ exercises }: ExerciseTableProps) {
       <TableHeader>
         <TableRow>
           <TableHead className="pl-0">Exercise</TableHead>
-          <TableHead className="w-[80px] text-right">Weight</TableHead>
-          <TableHead className="w-[60px] text-right pr-0">Reps</TableHead>
+          <TableHead className="w-[72px] text-right">Weight</TableHead>
+          <TableHead className="w-[72px] text-right pr-0">Reps</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -34,7 +34,7 @@ export function ExerciseTable({ exercises }: ExerciseTableProps) {
         ) : (
           exercises.map((exercise) => (
             <TableRow key={exercise.id}>
-              <TableCell className="pl-0 font-medium">{exercise.name}</TableCell>
+              <TableCell className="pl-0 font-medium max-w-0 truncate">{exercise.name}</TableCell>
               <TableCell className="text-right">{exercise.weight} kg</TableCell>
               <TableCell className="text-right pr-0">{exercise.reps}</TableCell>
             </TableRow>

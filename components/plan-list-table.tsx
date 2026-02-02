@@ -38,7 +38,7 @@ export function PlanListTable({ plans, onDelete }: PlanListTableProps) {
               <TableCell className="pl-0">
                 <Link
                   href={`/plan/${plan.id}`}
-                  className="font-medium hover:text-primary transition-colors"
+                  className="font-medium hover:text-primary transition-colors block truncate"
                 >
                   {plan.name}
                 </Link>
@@ -47,13 +47,12 @@ export function PlanListTable({ plans, onDelete }: PlanListTableProps) {
                   {plan.exercises.length !== 1 ? "s" : ""}
                 </p>
               </TableCell>
-              <TableCell className="text-right pr-0 w-[100px]">
-                <div className="flex items-center justify-end gap-1">
+              <TableCell className="text-right pr-0 w-[120px]">
+                <div className="flex items-center justify-end gap-2">
                   <Button
                     variant="default"
-                    size="icon-sm"
+                    size="icon"
                     asChild
-                    className="min-w-[32px] min-h-[32px]"
                   >
                     <Link href={`/plan/${plan.id}/workout`}>
                       <Play className="size-4" />
@@ -64,8 +63,8 @@ export function PlanListTable({ plans, onDelete }: PlanListTableProps) {
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
-                        size="icon-sm"
-                        className="min-w-[32px] min-h-[32px] cursor-pointer"
+                        size="icon"
+                        className="cursor-pointer"
                       >
                         <MoreVertical className="size-4" />
                         <span className="sr-only">Open menu</span>

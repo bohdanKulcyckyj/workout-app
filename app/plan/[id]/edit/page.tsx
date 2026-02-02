@@ -46,11 +46,11 @@ export default function EditPlanPage({
       <div className="flex items-center gap-2">
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           className="cursor-pointer"
           onClick={() => router.push(`/plan/${id}`)}
         >
-          <ArrowLeft className="size-4" />
+          <ArrowLeft className="size-5" />
           <span className="sr-only">Back</span>
         </Button>
         <h1 className="text-2xl font-bold">Edit Plan</h1>

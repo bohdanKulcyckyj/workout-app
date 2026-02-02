@@ -19,7 +19,7 @@ export default function HomePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Workout Plans</h1>
-        <Button asChild>
+        <Button asChild size="lg">
           <Link href="/plan/create">
             <Plus className="size-4" />
             New
