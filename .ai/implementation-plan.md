@@ -94,7 +94,7 @@ End-to-end UI tests using **Playwright** to verify the core user flows of the wo
 
 ## Phase 3: Workout Tracking Tests
 
-- [ ] Complete
+- [x] Complete
 
 ### Steps
 
