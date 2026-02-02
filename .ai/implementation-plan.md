@@ -70,7 +70,7 @@ End-to-end UI tests using **Playwright** to verify the core user flows of the wo
 
 ## Phase 2: Edit & Delete Plan Tests
 
-- [ ] Complete
+- [x] Complete
 
 ### Steps
 
