@@ -133,34 +133,34 @@ export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanForm
           <TableBody>
             {fields.map((field, index) => (
               <TableRow key={field.id}>
-                <TableCell className="pl-0 pr-1">
+                <TableCell className="pl-0 pr-1 py-2 align-middle">
                   <Input
                     placeholder="Exercise name"
-                    className="h-8 text-sm"
+                    className="h-8 text-sm block w-full"
                     {...register(`exercises.${index}.name`)}
                     aria-invalid={!!errors.exercises?.[index]?.name}
                   />
                 </TableCell>
-                <TableCell className="px-1">
+                <TableCell className="px-1 py-2 align-middle">
                   <Input
                     type="number"
                     step="0.5"
                     min="0"
-                    className="h-8 text-sm text-right"
+                    className="h-8 text-sm text-right block w-full"
                     {...register(`exercises.${index}.weight`, { valueAsNumber: true })}
                     aria-invalid={!!errors.exercises?.[index]?.weight}
                   />
                 </TableCell>
-                <TableCell className="px-1">
+                <TableCell className="px-1 py-2 align-middle">
                   <Input
                     type="number"
                     min="1"
-                    className="h-8 text-sm text-right"
+                    className="h-8 text-sm text-right block w-full"
                     {...register(`exercises.${index}.reps`, { valueAsNumber: true })}
                     aria-invalid={!!errors.exercises?.[index]?.reps}
                   />
                 </TableCell>
-                <TableCell className="pr-0 pl-1">
+                <TableCell className="pr-0 pl-1 py-2 align-middle">
                   <Button
                     type="button"
                     variant="ghost"
