@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import confetti from "canvas-confetti";
 import { ArrowLeft } from "lucide-react";
-import { storage } from "@/lib/storage";
-import { useLocalStoragePlan } from "@/lib/use-local-storage-plans";
+import { usePlan } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,7 +39,7 @@ export default function WorkoutModePage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { plan } = useLocalStoragePlan(id);
+  const { plan, isLoading, savePlan } = usePlan(id);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [exitDestination, setExitDestination] = useState<string>("/");
 
@@ -91,16 +90,16 @@ export default function WorkoutModePage({
     frame();
   }, []);
 
-  const persistToStorage = useCallback(() => {
+  const persistToStorage = useCallback(async () => {
     if (!plan) return;
     const current = getValues();
     const now = new Date().toISOString();
-    storage.savePlan({
+    await savePlan({
       ...plan,
       exercises: current.exercises,
       updatedAt: now,
     });
-  }, [plan, getValues]);
+  }, [plan, getValues, savePlan]);
 
   function handleExit(destination: string) {
     const exercises = getValues("exercises");
@@ -114,16 +113,24 @@ export default function WorkoutModePage({
     }
   }
 
-  function finishWorkout(destination?: string) {
+  async function finishWorkout(destination?: string) {
     if (!plan) return;
     const exercises = getValues("exercises");
     const now = new Date().toISOString();
-    storage.savePlan({
+    await savePlan({
       ...plan,
       exercises: exercises.map((e) => ({ ...e, done: false })),
       updatedAt: now,
     });
     router.push(destination ?? exitDestination);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
   }
 
   if (!plan) {

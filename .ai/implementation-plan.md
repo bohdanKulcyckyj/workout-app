@@ -20,8 +20,11 @@ Refactor exercises from inline plan data to standalone entities that can be reus
 
 ### Key Files (Current)
 - [lib/types.ts](lib/types.ts) — Zod schemas and TypeScript types
-- [lib/storage.ts](lib/storage.ts) — LocalStorage service for plans
-- [lib/use-local-storage-plans.ts](lib/use-local-storage-plans.ts) — React hooks for plan state
+- [lib/repositories/](lib/repositories/) — Repository pattern abstraction layer
+  - [lib/repositories/types.ts](lib/repositories/types.ts) — Repository interfaces
+  - [lib/repositories/provider.tsx](lib/repositories/provider.tsx) — React context for dependency injection
+  - [lib/repositories/local-storage/plan-repository.ts](lib/repositories/local-storage/plan-repository.ts) — localStorage implementation
+- [lib/hooks/use-plans.ts](lib/hooks/use-plans.ts) — React hooks for plan state (uses repository)
 - [components/plan-form.tsx](components/plan-form.tsx) — Plan create/edit form with inline exercises
 - [components/exercise-table.tsx](components/exercise-table.tsx) — Read-only exercise display
 - [app/page.tsx](app/page.tsx) — Home page with plan list
@@ -31,7 +34,7 @@ Refactor exercises from inline plan data to standalone entities that can be reus
 
 ## Phase 0: Data Layer Abstraction (Repository Pattern)
 
-- [ ] Complete
+- [x] Complete
 
 ### Goals
 Introduce a repository abstraction layer for data access. This decouples storage implementation from business logic, enabling easy swap from localStorage to a real backend API later.
@@ -81,11 +84,11 @@ Introduce a repository abstraction layer for data access. This decouples storage
    - All access now goes through repository
 
 ### Verification
-- [ ] Repository interfaces defined with full CRUD operations
-- [ ] localStorage implementation passes all existing functionality
-- [ ] React hooks work with repository abstraction
-- [ ] All existing pages/components still function correctly
-- [ ] No direct localStorage access outside repository implementations
+- [x] Repository interfaces defined with full CRUD operations
+- [x] localStorage implementation passes all existing functionality
+- [x] React hooks work with repository abstraction
+- [x] All existing pages/components still function correctly
+- [x] No direct localStorage access outside repository implementations
 
 ---
 

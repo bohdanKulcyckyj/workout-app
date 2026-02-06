@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { RepositoryProvider } from "@/lib/repositories";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,7 +34,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <div className="mx-auto max-w-lg px-4 py-6">{children}</div>
+        <RepositoryProvider>
+          <div className="mx-auto max-w-lg px-4 py-6">{children}</div>
+        </RepositoryProvider>
       </body>
     </html>
   );

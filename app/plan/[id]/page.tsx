@@ -4,7 +4,7 @@ import { use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pencil, Play, ArrowLeft } from "lucide-react";
-import { useLocalStoragePlan } from "@/lib/use-local-storage-plans";
+import { usePlan } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { ExerciseTable } from "@/components/exercise-table";
 
@@ -15,7 +15,15 @@ export default function PlanDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { plan } = useLocalStoragePlan(id);
+  const { plan, isLoading } = usePlan(id);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   if (!plan) {
     return (

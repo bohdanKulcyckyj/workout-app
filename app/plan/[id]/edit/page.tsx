@@ -4,8 +4,7 @@ import { use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { storage } from "@/lib/storage";
-import { useLocalStoragePlan } from "@/lib/use-local-storage-plans";
+import { usePlan } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { PlanForm } from "@/components/plan-form";
 import type { WorkoutPlan } from "@/lib/types";
@@ -17,7 +16,15 @@ export default function EditPlanPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { plan } = useLocalStoragePlan(id);
+  const { plan, isLoading, savePlan } = usePlan(id);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   if (!plan) {
     return (
@@ -36,8 +43,8 @@ export default function EditPlanPage({
     );
   }
 
-  function handleSave(updatedPlan: WorkoutPlan) {
-    storage.savePlan(updatedPlan);
+  async function handleSave(updatedPlan: WorkoutPlan) {
+    await savePlan(updatedPlan);
     router.push(`/plan/${updatedPlan.id}`);
   }
 
