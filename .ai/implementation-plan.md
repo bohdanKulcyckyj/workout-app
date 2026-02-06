@@ -29,9 +29,17 @@ Refactor exercises from inline plan data to standalone entities that can be reus
 - [lib/hooks/use-exercises.ts](lib/hooks/use-exercises.ts) — React hooks for exercise state (uses repository)
 - [lib/migration.ts](lib/migration.ts) — Migration logic for inline exercises to standalone entities
 - [components/migration-runner.tsx](components/migration-runner.tsx) — Component that runs migration on app load
+- [components/nav-header.tsx](components/nav-header.tsx) — Top navigation header (Plans | Exercises)
 - [components/plan-form.tsx](components/plan-form.tsx) — Plan create/edit form (creates exercises + plan with exerciseIds)
+- [components/plan-list-table.tsx](components/plan-list-table.tsx) — Plan list table with actions
+- [components/exercise-form.tsx](components/exercise-form.tsx) — Exercise create/edit form
+- [components/exercise-list-table.tsx](components/exercise-list-table.tsx) — Exercise list table with actions
 - [components/exercise-table.tsx](components/exercise-table.tsx) — Read-only exercise display (uses StandaloneExercise)
 - [app/page.tsx](app/page.tsx) — Home page with plan list
+- [app/exercise/page.tsx](app/exercise/page.tsx) — Exercise list page
+- [app/exercise/create/page.tsx](app/exercise/create/page.tsx) — Create exercise page
+- [app/exercise/[id]/page.tsx](app/exercise/[id]/page.tsx) — Exercise detail page
+- [app/exercise/[id]/edit/page.tsx](app/exercise/[id]/edit/page.tsx) — Edit exercise page
 - [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) — Workout tracking page (session-only state)
 
 ---
@@ -169,14 +177,14 @@ Create the standalone exercise entity, implement its repository, and add migrati
 
 ## Phase 2: Exercise Management Pages
 
-- [ ] Complete
+- [x] Complete
 
 ### Goals
 Create the exercise list and detail pages for managing standalone exercises.
 
 ### Steps
 
-1. **Create exercise list page** ([app/exercise/page.tsx](app/exercise/page.tsx) - new file)
+1. **Create exercise list page** ([app/exercise/page.tsx](app/exercise/page.tsx))
    - Similar layout to plan list ([app/page.tsx](app/page.tsx))
    - Show all exercises in a table/list with: label, description (truncated), weight, reps
    - "Create Exercise" button linking to detail page in create mode
@@ -184,40 +192,40 @@ Create the exercise list and detail pages for managing standalone exercises.
    - Delete action: confirmation dialog, then cascade delete
    - Empty state when no exercises exist
 
-2. **Create exercise list component** ([components/exercise-list-table.tsx](components/exercise-list-table.tsx) - new file)
+2. **Create exercise list component** ([components/exercise-list-table.tsx](components/exercise-list-table.tsx))
    - Reusable table component similar to [components/plan-list-table.tsx](components/plan-list-table.tsx)
    - Columns: Label, Description, Weight, Reps, Actions
-   - Actions dropdown: View, Edit, Delete
+   - Actions dropdown: Edit, Delete
 
-3. **Create exercise detail page** ([app/exercise/[id]/page.tsx](app/exercise/[id]/page.tsx) - new file)
+3. **Create exercise detail page** ([app/exercise/[id]/page.tsx](app/exercise/[id]/page.tsx))
    - View mode: Display all exercise fields, "Edit" button, "Delete" button, back navigation
    - Show which plans use this exercise (query via plan repository)
 
-4. **Create exercise form component** ([components/exercise-form.tsx](components/exercise-form.tsx) - new file)
+4. **Create exercise form component** ([components/exercise-form.tsx](components/exercise-form.tsx))
    - Fields: label (required), description (optional textarea), weight (optional number), reps (optional number)
    - Used for both create and edit
    - Validation with Zod schema
 
-5. **Create exercise create page** ([app/exercise/create/page.tsx](app/exercise/create/page.tsx) - new file)
+5. **Create exercise create page** ([app/exercise/create/page.tsx](app/exercise/create/page.tsx))
    - Uses exercise form component
-   - On save: create exercise, redirect to exercise detail or list
+   - On save: create exercise, redirect to exercise list
 
-6. **Create exercise edit page** ([app/exercise/[id]/edit/page.tsx](app/exercise/[id]/edit/page.tsx) - new file)
+6. **Create exercise edit page** ([app/exercise/[id]/edit/page.tsx](app/exercise/[id]/edit/page.tsx))
    - Uses exercise form component with initial data
    - On save: update exercise, redirect to exercise detail
 
-7. **Add navigation**
-   - Add "Exercises" link to home page or create a nav header
-   - Consider adding a simple top nav: Plans | Exercises
+7. **Add navigation** ([components/nav-header.tsx](components/nav-header.tsx))
+   - Created top nav header with Plans | Exercises links
+   - Added to layout.tsx to appear on all pages
 
 ### Verification
-- [ ] Can navigate to exercise list page
-- [ ] Can create a new exercise with all fields
-- [ ] Can view exercise details
-- [ ] Can edit an existing exercise
-- [ ] Can delete an exercise (with confirmation)
-- [ ] Deleting exercise removes it from plans that use it
-- [ ] Exercise detail shows which plans reference it
+- [x] Can navigate to exercise list page
+- [x] Can create a new exercise with all fields
+- [x] Can view exercise details
+- [x] Can edit an existing exercise
+- [x] Can delete an exercise (with confirmation)
+- [x] Deleting exercise removes it from plans that use it
+- [x] Exercise detail shows which plans reference it
 
 ---
 

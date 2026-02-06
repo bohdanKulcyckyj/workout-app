@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { RepositoryProvider } from "@/lib/repositories";
 import { MigrationRunner } from "@/components/migration-runner";
+import { NavHeader } from "@/components/nav-header";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -37,7 +38,10 @@ export default function RootLayout({
       >
         <RepositoryProvider>
           <MigrationRunner>
-            <div className="mx-auto max-w-lg px-4 py-6">{children}</div>
+            <div className="mx-auto max-w-lg px-4 py-6">
+              <NavHeader />
+              {children}
+            </div>
           </MigrationRunner>
         </RepositoryProvider>
       </body>
