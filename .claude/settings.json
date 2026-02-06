@@ -6,7 +6,7 @@
       "Bash(grep:*)",
       "Bash(find:*)",
       "Bash(wc:*)",
-      "bash",
+      "Bash",
       "mcp__playwright",
       "mcp__shadcn"
     ],
