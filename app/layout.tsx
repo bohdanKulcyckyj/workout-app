@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { RepositoryProvider } from "@/lib/repositories";
+import { MigrationRunner } from "@/components/migration-runner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,7 +36,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <RepositoryProvider>
-          <div className="mx-auto max-w-lg px-4 py-6">{children}</div>
+          <MigrationRunner>
+            <div className="mx-auto max-w-lg px-4 py-6">{children}</div>
+          </MigrationRunner>
         </RepositoryProvider>
       </body>
     </html>

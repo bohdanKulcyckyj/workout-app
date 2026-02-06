@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import confetti from "canvas-confetti";
 import { ArrowLeft } from "lucide-react";
-import { usePlan } from "@/lib/hooks";
+import { usePlan, useExercises } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,10 +26,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { Exercise } from "@/lib/types";
+
+// Workout exercise: standalone exercise data + session-only tracking
+interface WorkoutExercise {
+  id: string;
+  label: string;
+  weight: number;
+  reps: number;
+  done: boolean;
+}
 
 interface WorkoutFormValues {
-  exercises: Exercise[];
+  exercises: WorkoutExercise[];
 }
 
 export default function WorkoutModePage({
@@ -39,23 +47,37 @@ export default function WorkoutModePage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { plan, isLoading, savePlan } = usePlan(id);
+  const { plan, isLoading } = usePlan(id);
+  const { getExercisesByIds } = useExercises();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [exitDestination, setExitDestination] = useState<string>("/");
+  const [exercisesLoaded, setExercisesLoaded] = useState(false);
 
   const { register, control, getValues, setValue, watch, reset } =
     useForm<WorkoutFormValues>({
       defaultValues: {
-        exercises: plan?.exercises ?? [],
+        exercises: [],
       },
     });
 
+  // Load exercises from standalone storage and initialize workout state
   useEffect(() => {
-    if (plan) {
-      reset({ exercises: plan.exercises });
+    if (plan?.exerciseIds && !exercisesLoaded) {
+      getExercisesByIds(plan.exerciseIds).then((standaloneExercises) => {
+        const workoutExercises: WorkoutExercise[] = standaloneExercises.map(
+          (e) => ({
+            id: e.id,
+            label: e.label,
+            weight: e.weight ?? 0,
+            reps: e.reps ?? 0,
+            done: false,
+          })
+        );
+        reset({ exercises: workoutExercises });
+        setExercisesLoaded(true);
+      });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan?.id]);
+  }, [plan?.exerciseIds, getExercisesByIds, reset, exercisesLoaded]);
 
   const { fields } = useFieldArray({
     control,
@@ -90,38 +112,21 @@ export default function WorkoutModePage({
     frame();
   }, []);
 
-  const persistToStorage = useCallback(async () => {
-    if (!plan) return;
-    const current = getValues();
-    const now = new Date().toISOString();
-    await savePlan({
-      ...plan,
-      exercises: current.exercises,
-      updatedAt: now,
-    });
-  }, [plan, getValues, savePlan]);
-
   function handleExit(destination: string) {
     const exercises = getValues("exercises");
     const allDone = exercises.every((e) => e.done);
 
     if (allDone) {
-      finishWorkout(destination);
+      // All done, just navigate
+      router.push(destination);
     } else {
       setExitDestination(destination);
       setShowConfirmDialog(true);
     }
   }
 
-  async function finishWorkout(destination?: string) {
-    if (!plan) return;
-    const exercises = getValues("exercises");
-    const now = new Date().toISOString();
-    await savePlan({
-      ...plan,
-      exercises: exercises.map((e) => ({ ...e, done: false })),
-      updatedAt: now,
-    });
+  function finishWorkout(destination?: string) {
+    // Session state is discarded, just navigate away
     router.push(destination ?? exitDestination);
   }
 
@@ -194,7 +199,6 @@ export default function WorkoutModePage({
                     checked={isDone}
                     onCheckedChange={(checked) => {
                       setValue(`exercises.${index}.done`, checked === true);
-                      persistToStorage();
 
                       const exercises = getValues("exercises");
                       const allDone = exercises.every((e) => e.done);
@@ -205,13 +209,13 @@ export default function WorkoutModePage({
                         hasCelebratedRef.current = false;
                       }
                     }}
-                    aria-label={`Mark ${field.name} as done`}
+                    aria-label={`Mark ${field.label} as done`}
                   />
                 </TableCell>
                 <TableCell
                   className={`max-w-0 truncate ${isDone ? "line-through text-muted-foreground" : "font-medium"}`}
                 >
-                  {field.name}
+                  {field.label}
                 </TableCell>
                 <TableCell className="px-1">
                   <Input
@@ -221,7 +225,6 @@ export default function WorkoutModePage({
                     className="h-8 text-sm text-right"
                     {...register(`exercises.${index}.weight`, {
                       valueAsNumber: true,
-                      onBlur: () => persistToStorage(),
                     })}
                   />
                 </TableCell>
@@ -232,7 +235,6 @@ export default function WorkoutModePage({
                     className="h-8 text-sm text-right"
                     {...register(`exercises.${index}.reps`, {
                       valueAsNumber: true,
-                      onBlur: () => persistToStorage(),
                     })}
                   />
                 </TableCell>

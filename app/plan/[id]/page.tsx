@@ -1,12 +1,13 @@
 "use client";
 
-import { use } from "react";
+import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pencil, Play, ArrowLeft } from "lucide-react";
-import { usePlan } from "@/lib/hooks";
+import { usePlan, useExercises } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { ExerciseTable } from "@/components/exercise-table";
+import type { StandaloneExercise } from "@/lib/types";
 
 export default function PlanDetailPage({
   params,
@@ -16,6 +17,14 @@ export default function PlanDetailPage({
   const { id } = use(params);
   const router = useRouter();
   const { plan, isLoading } = usePlan(id);
+  const { getExercisesByIds } = useExercises();
+  const [exercises, setExercises] = useState<StandaloneExercise[]>([]);
+
+  useEffect(() => {
+    if (plan?.exerciseIds) {
+      getExercisesByIds(plan.exerciseIds).then(setExercises);
+    }
+  }, [plan?.exerciseIds, getExercisesByIds]);
 
   if (isLoading) {
     return (
@@ -67,7 +76,7 @@ export default function PlanDetailPage({
         </Button>
       </div>
 
-      <ExerciseTable exercises={plan.exercises} />
+      <ExerciseTable exercises={exercises} />
     </div>
   );
 }

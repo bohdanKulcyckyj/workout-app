@@ -2,16 +2,22 @@
 
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { usePlans } from "@/lib/hooks";
+import { usePlans, useExercises } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { PlanForm } from "@/components/plan-form";
-import type { WorkoutPlan } from "@/lib/types";
+import type { WorkoutPlan, StandaloneExercise } from "@/lib/types";
 
 export default function CreatePlanPage() {
   const router = useRouter();
   const { savePlan } = usePlans();
+  const { saveExercise } = useExercises();
 
-  async function handleSave(plan: WorkoutPlan) {
+  async function handleSave(plan: WorkoutPlan, exercises: StandaloneExercise[]) {
+    // Save all exercises first
+    for (const exercise of exercises) {
+      await saveExercise(exercise);
+    }
+    // Then save the plan
     await savePlan(plan);
     router.push(`/plan/${plan.id}`);
   }

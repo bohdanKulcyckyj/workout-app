@@ -19,16 +19,20 @@ Refactor exercises from inline plan data to standalone entities that can be reus
 - shadcn/ui components (Dialog, Command/Combobox for dropdown)
 
 ### Key Files (Current)
-- [lib/types.ts](lib/types.ts) — Zod schemas and TypeScript types
+- [lib/types.ts](lib/types.ts) — Zod schemas and TypeScript types (StandaloneExercise, WorkoutPlan with exerciseIds)
 - [lib/repositories/](lib/repositories/) — Repository pattern abstraction layer
-  - [lib/repositories/types.ts](lib/repositories/types.ts) — Repository interfaces
+  - [lib/repositories/types.ts](lib/repositories/types.ts) — Repository interfaces (PlanRepository, ExerciseRepository)
   - [lib/repositories/provider.tsx](lib/repositories/provider.tsx) — React context for dependency injection
-  - [lib/repositories/local-storage/plan-repository.ts](lib/repositories/local-storage/plan-repository.ts) — localStorage implementation
+  - [lib/repositories/local-storage/plan-repository.ts](lib/repositories/local-storage/plan-repository.ts) — localStorage plan implementation
+  - [lib/repositories/local-storage/exercise-repository.ts](lib/repositories/local-storage/exercise-repository.ts) — localStorage exercise implementation
 - [lib/hooks/use-plans.ts](lib/hooks/use-plans.ts) — React hooks for plan state (uses repository)
-- [components/plan-form.tsx](components/plan-form.tsx) — Plan create/edit form with inline exercises
-- [components/exercise-table.tsx](components/exercise-table.tsx) — Read-only exercise display
+- [lib/hooks/use-exercises.ts](lib/hooks/use-exercises.ts) — React hooks for exercise state (uses repository)
+- [lib/migration.ts](lib/migration.ts) — Migration logic for inline exercises to standalone entities
+- [components/migration-runner.tsx](components/migration-runner.tsx) — Component that runs migration on app load
+- [components/plan-form.tsx](components/plan-form.tsx) — Plan create/edit form (creates exercises + plan with exerciseIds)
+- [components/exercise-table.tsx](components/exercise-table.tsx) — Read-only exercise display (uses StandaloneExercise)
 - [app/page.tsx](app/page.tsx) — Home page with plan list
-- [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) — Workout tracking page
+- [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) — Workout tracking page (session-only state)
 
 ---
 
@@ -94,7 +98,7 @@ Introduce a repository abstraction layer for data access. This decouples storage
 
 ## Phase 1: Exercise Entity & Storage Infrastructure
 
-- [ ] Complete
+- [x] Complete
 
 ### Goals
 Create the standalone exercise entity, implement its repository, and add migration logic to convert existing inline exercises.
@@ -155,11 +159,11 @@ Create the standalone exercise entity, implement its repository, and add migrati
    - After migration, work with new schema only
 
 ### Verification
-- [ ] Exercise repository works independently (can save/load exercises)
-- [ ] Migration converts existing plans correctly
-- [ ] Plans now store `exerciseIds` instead of inline exercises
-- [ ] Deleting an exercise removes its ID from all plans (cascade)
-- [ ] App still loads without errors after migration
+- [x] Exercise repository works independently (can save/load exercises)
+- [x] Migration converts existing plans correctly
+- [x] Plans now store `exerciseIds` instead of inline exercises
+- [x] Deleting an exercise removes its ID from all plans (cascade)
+- [x] App still loads without errors after migration
 
 ---
 

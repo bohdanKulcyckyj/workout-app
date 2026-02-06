@@ -1,3 +1,11 @@
-export type { PlanRepository } from "./types";
-export { RepositoryProvider, useRepositories, usePlanRepository } from "./provider";
-export { LocalStoragePlanRepository } from "./local-storage";
+export type { PlanRepository, ExerciseRepository } from "./types";
+export {
+  RepositoryProvider,
+  useRepositories,
+  usePlanRepository,
+  useExerciseRepository,
+} from "./provider";
+export {
+  LocalStoragePlanRepository,
+  LocalStorageExerciseRepository,
+} from "./local-storage";

@@ -1,11 +1,15 @@
 "use client";
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import type { PlanRepository } from "./types";
-import { LocalStoragePlanRepository } from "./local-storage";
+import type { PlanRepository, ExerciseRepository } from "./types";
+import {
+  LocalStoragePlanRepository,
+  LocalStorageExerciseRepository,
+} from "./local-storage";
 
 interface RepositoryContextValue {
   planRepository: PlanRepository;
+  exerciseRepository: ExerciseRepository;
 }
 
 const RepositoryContext = createContext<RepositoryContextValue | null>(null);
@@ -13,18 +17,29 @@ const RepositoryContext = createContext<RepositoryContextValue | null>(null);
 interface RepositoryProviderProps {
   children: ReactNode;
   planRepository?: PlanRepository;
+  exerciseRepository?: ExerciseRepository;
 }
 
 export function RepositoryProvider({
   children,
   planRepository,
+  exerciseRepository,
 }: RepositoryProviderProps) {
-  const value = useMemo(
-    () => ({
-      planRepository: planRepository ?? new LocalStoragePlanRepository(),
-    }),
-    [planRepository]
-  );
+  const value = useMemo(() => {
+    const planRepo = planRepository ?? new LocalStoragePlanRepository();
+    const exerciseRepo =
+      exerciseRepository ?? new LocalStorageExerciseRepository();
+
+    // Wire up circular dependency for cascade delete
+    if (exerciseRepo instanceof LocalStorageExerciseRepository) {
+      exerciseRepo.setPlanRepository(planRepo);
+    }
+
+    return {
+      planRepository: planRepo,
+      exerciseRepository: exerciseRepo,
+    };
+  }, [planRepository, exerciseRepository]);
 
   return (
     <RepositoryContext.Provider value={value}>
@@ -43,4 +58,8 @@ export function useRepositories(): RepositoryContextValue {
 
 export function usePlanRepository(): PlanRepository {
   return useRepositories().planRepository;
+}
+
+export function useExerciseRepository(): ExerciseRepository {
+  return useRepositories().exerciseRepository;
 }

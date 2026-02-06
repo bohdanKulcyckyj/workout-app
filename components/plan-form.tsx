@@ -14,20 +14,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { WorkoutPlan } from "@/lib/types";
+import type { WorkoutPlan, StandaloneExercise } from "@/lib/types";
+
+// Form schema for inline exercise creation (will be replaced with selector in Phase 3)
+const exerciseFormSchema = z.object({
+  id: z.string(),
+  label: z.string().min(1, "Exercise name is required"),
+  weight: z.number().min(0, "Weight must be 0 or more"),
+  reps: z.number().int().min(1, "At least 1 rep required"),
+});
 
 const planFormSchema = z.object({
   name: z.string().min(1, "Plan name is required"),
   exercises: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string().min(1, "Exercise name is required"),
-        weight: z.number().min(0, "Weight must be 0 or more"),
-        reps: z.number().int().min(1, "At least 1 rep required"),
-        done: z.boolean(),
-      })
-    )
+    .array(exerciseFormSchema)
     .min(1, "At least one exercise is required"),
 });
 
@@ -35,18 +35,30 @@ type PlanFormValues = z.infer<typeof planFormSchema>;
 
 interface PlanFormProps {
   initialPlan?: WorkoutPlan;
-  onSave: (plan: WorkoutPlan) => void;
+  initialExercises?: StandaloneExercise[];
+  onSave: (plan: WorkoutPlan, exercises: StandaloneExercise[]) => void;
   submitLabel?: string;
 }
 
-export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanFormProps) {
-  const defaultValues: PlanFormValues = initialPlan
-    ? { name: initialPlan.name, exercises: initialPlan.exercises }
+export function PlanForm({
+  initialPlan,
+  initialExercises,
+  onSave,
+  submitLabel = "Save",
+}: PlanFormProps) {
+  const defaultValues: PlanFormValues = initialPlan && initialExercises
+    ? {
+        name: initialPlan.name,
+        exercises: initialExercises.map((e) => ({
+          id: e.id,
+          label: e.label,
+          weight: e.weight ?? 0,
+          reps: e.reps ?? 10,
+        })),
+      }
     : {
         name: "",
-        exercises: [
-          { id: crypto.randomUUID(), name: "", weight: 0, reps: 10, done: false },
-        ],
+        exercises: [{ id: crypto.randomUUID(), label: "", weight: 0, reps: 10 }],
       };
 
   const {
@@ -67,14 +79,25 @@ export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanForm
 
   function onSubmit(data: PlanFormValues) {
     const now = new Date().toISOString();
+
+    // Create standalone exercises from form data
+    const exercises: StandaloneExercise[] = data.exercises.map((e) => ({
+      id: e.id,
+      label: e.label,
+      weight: e.weight || undefined,
+      reps: e.reps || undefined,
+    }));
+
+    // Create plan with exercise IDs
     const plan: WorkoutPlan = {
       id: initialPlan?.id ?? crypto.randomUUID(),
       name: data.name,
-      exercises: data.exercises,
+      exerciseIds: exercises.map((e) => e.id),
       createdAt: initialPlan?.createdAt ?? now,
       updatedAt: now,
     };
-    onSave(plan);
+
+    onSave(plan, exercises);
   }
 
   return (
@@ -105,10 +128,9 @@ export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanForm
             onClick={() =>
               append({
                 id: crypto.randomUUID(),
-                name: "",
+                label: "",
                 weight: 0,
                 reps: 10,
-                done: false,
               })
             }
           >
@@ -137,8 +159,8 @@ export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanForm
                   <Input
                     placeholder="Exercise name"
                     className="h-8 text-sm block w-full"
-                    {...register(`exercises.${index}.name`)}
-                    aria-invalid={!!errors.exercises?.[index]?.name}
+                    {...register(`exercises.${index}.label`)}
+                    aria-invalid={!!errors.exercises?.[index]?.label}
                   />
                 </TableCell>
                 <TableCell className="px-1 py-2 align-middle">
@@ -170,10 +192,9 @@ export function PlanForm({ initialPlan, onSave, submitLabel = "Save" }: PlanForm
                       if (fields.length === 1) {
                         append({
                           id: crypto.randomUUID(),
-                          name: "",
+                          label: "",
                           weight: 0,
                           reps: 10,
-                          done: false,
                         });
                       }
                     }}
