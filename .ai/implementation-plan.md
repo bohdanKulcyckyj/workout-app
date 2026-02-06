@@ -1,113 +1,314 @@
-# UI Tests Implementation Plan
+# Exercise Entity Refactoring - Implementation Plan
 
 ## Overview
 
-End-to-end UI tests using **Playwright** to verify the core user flows of the workout app: creating, viewing, editing, deleting workout plans, and tracking workouts. Tests run against the Next.js dev server and interact with the app through the browser, including localStorage-based persistence.
+Refactor exercises from inline plan data to standalone entities that can be reused across multiple workout plans. This enables an exercise library where users manage exercises independently, then compose plans by selecting from existing exercises.
+
+### Key Decisions
+- **Reference model**: Plans store exercise IDs only; always fetch fresh exercise data (single source of truth)
+- **Migration**: Auto-migrate existing inline exercises to standalone entities on first load
+- **Deletion**: Cascade delete - removing an exercise removes it from all plans
+- **Creation**: Plan form dropdown includes "Create new exercise" modal option
+- **Data layer**: Repository pattern abstraction to enable easy backend swap later
 
 ### Tech Stack
-- **Playwright**  E2E test framework with built-in browser automation
-- **@playwright/test**  test runner with assertions, fixtures, and parallel execution
-- No CI setup  tests run locally via `npx playwright test`
+- Zod schemas for validation
+- Repository pattern for data access (localStorage now, API later)
+- localStorage for persistence (separate keys for exercises vs plans)
+- React Hook Form for forms
+- shadcn/ui components (Dialog, Command/Combobox for dropdown)
 
-### Key Files
-- [app/page.tsx](app/page.tsx)  Home page, plan list
-- [app/plan/create/page.tsx](app/plan/create/page.tsx)  Create plan form
-- [app/plan/[id]/page.tsx](app/plan/[id]/page.tsx)  Plan detail view
-- [app/plan/[id]/edit/page.tsx](app/plan/[id]/edit/page.tsx)  Edit plan form
-- [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx)  Workout tracking
-- [components/plan-form.tsx](components/plan-form.tsx)  Reusable plan form (create/edit)
-- [components/plan-list-table.tsx](components/plan-list-table.tsx)  Plan list with actions
-- [components/exercise-table.tsx](components/exercise-table.tsx)  Read-only exercise display
-- [lib/types.ts](lib/types.ts)  Zod schemas and TypeScript types
-- [lib/storage.ts](lib/storage.ts)  LocalStorage service
-- [lib/use-local-storage-plans.ts](lib/use-local-storage-plans.ts)  Reactive storage hook
-
-### Conventions
-- Test files live in `e2e/` directory at project root
-- Each phase gets its own test file
-- Tests clear localStorage before each test for isolation
-- Tests use Playwright's built-in `expect` assertions
-- Locators use accessible roles/labels where possible, falling back to test-ids if needed
+### Key Files (Current)
+- [lib/types.ts](lib/types.ts) — Zod schemas and TypeScript types
+- [lib/storage.ts](lib/storage.ts) — LocalStorage service for plans
+- [lib/use-local-storage-plans.ts](lib/use-local-storage-plans.ts) — React hooks for plan state
+- [components/plan-form.tsx](components/plan-form.tsx) — Plan create/edit form with inline exercises
+- [components/exercise-table.tsx](components/exercise-table.tsx) — Read-only exercise display
+- [app/page.tsx](app/page.tsx) — Home page with plan list
+- [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) — Workout tracking page
 
 ---
 
-## Phase 1: Playwright Setup + Create & View Plan Tests
+## Phase 0: Data Layer Abstraction (Repository Pattern)
 
-- [x] Complete
+- [ ] Complete
+
+### Goals
+Introduce a repository abstraction layer for data access. This decouples storage implementation from business logic, enabling easy swap from localStorage to a real backend API later.
 
 ### Steps
 
-1. **Install Playwright and configure**
-   - Install `@playwright/test` as a dev dependency
-   - Run `npx playwright install` to install browser binaries (chromium only for speed)
-   - Create `playwright.config.ts` at project root with:
-     - Base URL pointing to `http://localhost:3000`
-     - `webServer` config to auto-start `npm run dev` before tests
-     - Single project (chromium only)
-     - Reasonable timeouts
+1. **Define repository interfaces** ([lib/repositories/types.ts](lib/repositories/types.ts) - new file)
+   ```typescript
+   export interface PlanRepository {
+     getAll(): Promise<WorkoutPlan[]>;
+     getById(id: string): Promise<WorkoutPlan | null>;
+     save(plan: WorkoutPlan): Promise<void>;
+     delete(id: string): Promise<void>;
+   }
 
-2. **Add npm script**
-   - Add `"test:e2e": "playwright test"` to [package.json](package.json)
+   export interface ExerciseRepository {
+     getAll(): Promise<StandaloneExercise[]>;
+     getById(id: string): Promise<StandaloneExercise | null>;
+     getByIds(ids: string[]): Promise<StandaloneExercise[]>;
+     save(exercise: StandaloneExercise): Promise<void>;
+     delete(id: string): Promise<void>;
+   }
+   ```
 
-3. **Create test helper for localStorage cleanup**
-   - Create `e2e/helpers.ts` with a `clearStorage` helper that clears localStorage before each test
+2. **Implement localStorage plan repository** ([lib/repositories/local-storage/plan-repository.ts](lib/repositories/local-storage/plan-repository.ts) - new file)
+   - Migrate existing logic from [lib/storage.ts](lib/storage.ts)
+   - Implement `PlanRepository` interface
+   - Keep same localStorage key `"workout-plans"`
 
-4. **Write create plan tests** (`e2e/create-plan.spec.ts`)
-   - **Test: empty state shows prompt to create plan**  navigate to `/`, verify empty state message and create button visible
-   - **Test: can create a plan with exercises**  navigate to `/plan/create`, fill plan name, fill exercise name/weight/reps, add a second exercise, submit form, verify redirect to plan detail page, verify plan name and exercises displayed
-   - **Test: can add and remove exercise rows**  verify add button creates new row, verify delete (X) button removes a row, verify deleting last row auto-appends blank row
+3. **Create repository provider/context** ([lib/repositories/provider.tsx](lib/repositories/provider.tsx) - new file)
+   - React context to provide repository instances
+   - Default to localStorage implementations
+   - Easy to swap to API implementations later
 
-5. **Write view plan tests** (`e2e/create-plan.spec.ts` continued or separate)
-   - **Test: plan detail page shows all exercise data**  create a plan, navigate to detail page, verify plan name, exercise names, weights, reps all displayed correctly
-   - **Test: plan appears in home page list**  create a plan, navigate to home, verify plan name and exercise count shown in list
-   - **Test: plan detail has navigation buttons**  verify "Start Workout", "Edit Plan", and back button are present
+4. **Update React hooks to use repositories** ([lib/use-local-storage-plans.ts](lib/use-local-storage-plans.ts))
+   - Rename to [lib/hooks/use-plans.ts](lib/hooks/use-plans.ts)
+   - Use repository from context instead of direct localStorage access
+   - Keep same hook API (`usePlans`, `usePlan`)
+
+5. **Update all consuming components**
+   - Wrap app with repository provider
+   - Update imports from old hook location to new
+   - Ensure all pages still work with async repository methods
+
+6. **Remove old storage service** ([lib/storage.ts](lib/storage.ts))
+   - Delete after migration complete
+   - All access now goes through repository
 
 ### Verification
-- Run `npx playwright test`  all tests pass
-- Tests start dev server automatically and clean up after themselves
+- [ ] Repository interfaces defined with full CRUD operations
+- [ ] localStorage implementation passes all existing functionality
+- [ ] React hooks work with repository abstraction
+- [ ] All existing pages/components still function correctly
+- [ ] No direct localStorage access outside repository implementations
 
 ---
 
-## Phase 2: Edit & Delete Plan Tests
+## Phase 1: Exercise Entity & Storage Infrastructure
 
-- [x] Complete
+- [ ] Complete
+
+### Goals
+Create the standalone exercise entity, implement its repository, and add migration logic to convert existing inline exercises.
 
 ### Steps
 
-1. **Write edit plan tests** (`e2e/edit-plan.spec.ts`)
-   - **Test: can navigate to edit page from plan detail**  create a plan, go to detail, click "Edit Plan", verify form is pre-filled with existing data
-   - **Test: can edit plan name**  change plan name, save, verify updated name on detail page
-   - **Test: can edit exercise details**  modify exercise name/weight/reps, save, verify changes persisted on detail page
-   - **Test: can add exercises during edit**  add a new exercise row, fill it in, save, verify new exercise appears
-   - **Test: can remove exercises during edit**  remove an exercise, save, verify it's gone from detail page
+1. **Update types** ([lib/types.ts](lib/types.ts))
+   - Create new `StandaloneExercise` schema:
+     ```typescript
+     export const standaloneExerciseSchema = z.object({
+       id: z.string(),
+       label: z.string().min(1),
+       description: z.string().optional(),
+       weight: z.number().optional(),
+       reps: z.number().optional(),
+     });
+     ```
+   - Update `WorkoutPlan` to reference exercise IDs instead of inline exercises:
+     ```typescript
+     export const workoutPlanSchema = z.object({
+       id: z.string(),
+       name: z.string(),
+       exerciseIds: z.array(z.string()), // Changed from exercises array
+       createdAt: z.string(),
+       updatedAt: z.string(),
+     });
+     ```
+   - Keep old `exerciseSchema` temporarily for workout tracking (has `done` flag)
 
-2. **Write delete plan tests** (`e2e/delete-plan.spec.ts`)
-   - **Test: can delete a plan from home page**  create a plan, go to home, open dropdown menu, click delete, confirm in dialog, verify plan removed from list
-   - **Test: delete confirmation dialog can be cancelled**  open delete dialog, cancel, verify plan still exists
-   - **Test: deleting last plan shows empty state**  create one plan, delete it, verify empty state message appears
+2. **Implement localStorage exercise repository** ([lib/repositories/local-storage/exercise-repository.ts](lib/repositories/local-storage/exercise-repository.ts) - new file)
+   - Implement `ExerciseRepository` interface from Phase 0
+   - Storage key: `"exercises"`
+   - On `delete`: Also remove exercise ID from all plans (cascade) via plan repository
+
+3. **Create exercise React hooks** ([lib/hooks/use-exercises.ts](lib/hooks/use-exercises.ts) - new file)
+   - `useExercises()` — returns all exercises with loading/refresh
+   - `useExercise(id)` — returns single exercise
+   - Uses exercise repository from context
+
+4. **Update repository provider** ([lib/repositories/provider.tsx](lib/repositories/provider.tsx))
+   - Add exercise repository to context
+   - Provide localStorage implementation by default
+
+5. **Implement migration logic** ([lib/migration.ts](lib/migration.ts) - new file)
+   - `migrateInlineExercises()` function:
+     - Read all plans via plan repository
+     - For each plan with inline `exercises` array (old format):
+       - Extract each exercise, generate `StandaloneExercise` (use existing id, map `name`→`label`)
+       - Deduplicate by label (same name = same exercise)
+       - Save to exercise repository
+       - Update plan to use `exerciseIds` array
+       - Save updated plan via plan repository
+     - Mark migration complete with `localStorage.setItem("migration-v1", "done")`
+   - Run migration on app startup (check flag first)
+
+6. **Update plan repository** ([lib/repositories/local-storage/plan-repository.ts](lib/repositories/local-storage/plan-repository.ts))
+   - Handle both old (inline exercises) and new (exerciseIds) schema during migration period
+   - After migration, work with new schema only
 
 ### Verification
-- Run `npx playwright test`  all tests pass (including Phase 1 tests)
-- Edit tests verify data persists correctly through the create � edit � view cycle
+- [ ] Exercise repository works independently (can save/load exercises)
+- [ ] Migration converts existing plans correctly
+- [ ] Plans now store `exerciseIds` instead of inline exercises
+- [ ] Deleting an exercise removes its ID from all plans (cascade)
+- [ ] App still loads without errors after migration
 
 ---
 
-## Phase 3: Workout Tracking Tests
+## Phase 2: Exercise Management Pages
 
-- [x] Complete
+- [ ] Complete
+
+### Goals
+Create the exercise list and detail pages for managing standalone exercises.
 
 ### Steps
 
-1. **Write workout tracking tests** (`e2e/workout.spec.ts`)
-   - **Test: can start workout from plan detail**  create a plan, go to detail, click "Start Workout", verify workout page loads with exercises
-   - **Test: can start workout from home page**  create a plan, click workout button on home list, verify workout page loads
-   - **Test: can check off exercises**  check an exercise checkbox, verify it visually updates (row styling), verify progress counter updates (e.g., "1 / 2 exercises done")
-   - **Test: can modify weight and reps during workout**  change weight/reps values in the workout table, verify inputs accept new values
-   - **Test: completing all exercises triggers confetti**  check all exercises, verify confetti canvas or animation triggers
-   - **Test: end workout with all exercises complete**  complete all exercises, click "End Workout", verify redirect to home, verify exercises reset to unchecked for next workout
-   - **Test: end workout with incomplete exercises shows confirmation**  leave exercises unchecked, click "End Workout", verify confirmation dialog appears, confirm, verify redirect to home
-   - **Test: can cancel end workout confirmation**  leave exercises unchecked, click "End Workout", cancel dialog, verify still on workout page
+1. **Create exercise list page** ([app/exercise/page.tsx](app/exercise/page.tsx) - new file)
+   - Similar layout to plan list ([app/page.tsx](app/page.tsx))
+   - Show all exercises in a table/list with: label, description (truncated), weight, reps
+   - "Create Exercise" button linking to detail page in create mode
+   - Each row: click to view details, dropdown menu with Edit/Delete actions
+   - Delete action: confirmation dialog, then cascade delete
+   - Empty state when no exercises exist
+
+2. **Create exercise list component** ([components/exercise-list-table.tsx](components/exercise-list-table.tsx) - new file)
+   - Reusable table component similar to [components/plan-list-table.tsx](components/plan-list-table.tsx)
+   - Columns: Label, Description, Weight, Reps, Actions
+   - Actions dropdown: View, Edit, Delete
+
+3. **Create exercise detail page** ([app/exercise/[id]/page.tsx](app/exercise/[id]/page.tsx) - new file)
+   - View mode: Display all exercise fields, "Edit" button, "Delete" button, back navigation
+   - Show which plans use this exercise (query via plan repository)
+
+4. **Create exercise form component** ([components/exercise-form.tsx](components/exercise-form.tsx) - new file)
+   - Fields: label (required), description (optional textarea), weight (optional number), reps (optional number)
+   - Used for both create and edit
+   - Validation with Zod schema
+
+5. **Create exercise create page** ([app/exercise/create/page.tsx](app/exercise/create/page.tsx) - new file)
+   - Uses exercise form component
+   - On save: create exercise, redirect to exercise detail or list
+
+6. **Create exercise edit page** ([app/exercise/[id]/edit/page.tsx](app/exercise/[id]/edit/page.tsx) - new file)
+   - Uses exercise form component with initial data
+   - On save: update exercise, redirect to exercise detail
+
+7. **Add navigation**
+   - Add "Exercises" link to home page or create a nav header
+   - Consider adding a simple top nav: Plans | Exercises
 
 ### Verification
-- Run `npx playwright test`  all tests pass (all 3 phases)
-- Workout tests verify the full lifecycle: start � track � complete � reset
+- [ ] Can navigate to exercise list page
+- [ ] Can create a new exercise with all fields
+- [ ] Can view exercise details
+- [ ] Can edit an existing exercise
+- [ ] Can delete an exercise (with confirmation)
+- [ ] Deleting exercise removes it from plans that use it
+- [ ] Exercise detail shows which plans reference it
+
+---
+
+## Phase 3: Plan Form Refactoring
+
+- [ ] Complete
+
+### Goals
+Replace the inline exercise creation in plan form with a dropdown selector and "Create new" modal.
+
+### Steps
+
+1. **Create exercise selector component** ([components/exercise-selector.tsx](components/exercise-selector.tsx) - new file)
+   - Combobox/Command dropdown (shadcn) listing all available exercises
+   - Shows exercise label, optionally weight/reps as hint
+   - "Create new exercise" option at bottom of list
+   - Fires `onSelect(exerciseId)` callback
+   - Filters exercises already added to current plan
+
+2. **Create exercise modal** ([components/exercise-modal.tsx](components/exercise-modal.tsx) - new file)
+   - Dialog containing the exercise form
+   - Used for quick inline creation from plan form
+   - On save: creates exercise, returns new exercise ID to parent
+   - Can reuse [components/exercise-form.tsx](components/exercise-form.tsx)
+
+3. **Refactor plan form** ([components/plan-form.tsx](components/plan-form.tsx))
+   - Remove inline exercise rows (name, weight, reps inputs per row)
+   - Replace with:
+     - List of selected exercises (read-only display with remove button)
+     - Exercise selector dropdown to add exercises
+   - Form now manages `exerciseIds: string[]` instead of `exercises: Exercise[]`
+   - When saving, pass `exerciseIds` to storage
+
+4. **Update plan display components**
+   - [components/exercise-table.tsx](components/exercise-table.tsx): Fetch exercises by IDs to display
+   - [app/plan/[id]/page.tsx](app/plan/[id]/page.tsx): Load exercises from IDs for display
+
+5. **Update plan create/edit pages**
+   - [app/plan/create/page.tsx](app/plan/create/page.tsx): Works with new form structure
+   - [app/plan/[id]/edit/page.tsx](app/plan/[id]/edit/page.tsx): Load plan's exercises by ID for initial form state
+
+### Verification
+- [ ] Plan form shows dropdown instead of inline exercise inputs
+- [ ] Can select existing exercises from dropdown
+- [ ] Can create new exercise via modal from dropdown
+- [ ] Selected exercises display in plan form with remove option
+- [ ] Saving plan stores only exercise IDs
+- [ ] Plan detail page correctly displays exercises fetched by ID
+- [ ] Edit plan page loads existing exercises correctly
+
+---
+
+## Phase 4: Workout Page Updates & Cleanup
+
+- [ ] Complete
+
+### Goals
+Update workout tracking to work with standalone exercises and clean up deprecated code.
+
+### Steps
+
+1. **Update workout page** ([app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx))
+   - Fetch exercises by ID from exercise storage
+   - Workout state needs to track `done` status per exercise
+   - Store workout state in local component state (session-only)
+   - On workout end, state is discarded
+
+2. **Handle weight/reps during workout**
+   - Standalone exercise has default weight/reps
+   - During workout, user can modify - these are session-only values
+   - On workout end, modifications are discarded (or optionally prompt to update exercise defaults)
+
+3. **Update plan storage** ([lib/storage.ts](lib/storage.ts))
+   - Remove old exercise-inline logic
+   - Ensure `savePlan` works with `exerciseIds` only
+
+4. **Clean up old code**
+   - Remove unused `exerciseSchema` fields if no longer needed
+   - Remove old inline exercise form components if any
+   - Update any remaining references to `plan.exercises`
+
+5. **Update E2E tests** ([e2e/](e2e/))
+   - Update create-plan tests for new dropdown flow
+   - Update edit-plan tests for exercise selection
+   - Update workout tests for new data flow
+   - Add new tests for exercise CRUD
+
+6. **Final migration testing**
+   - Test fresh install (no localStorage)
+   - Test with existing plans (migration runs)
+   - Verify all features work post-migration
+
+### Verification
+- [ ] Workout page loads exercises from standalone storage
+- [ ] Can check off exercises during workout
+- [ ] Can modify weight/reps during workout (session-only)
+- [ ] Completing workout works correctly
+- [ ] All E2E tests pass
+- [ ] No console errors or type errors
+- [ ] Migration works for existing users
+- [ ] Fresh installs work without issues
