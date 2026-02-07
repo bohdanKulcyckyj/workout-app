@@ -30,7 +30,9 @@ Refactor exercises from inline plan data to standalone entities that can be reus
 - [lib/migration.ts](lib/migration.ts) — Migration logic for inline exercises to standalone entities
 - [components/migration-runner.tsx](components/migration-runner.tsx) — Component that runs migration on app load
 - [components/nav-header.tsx](components/nav-header.tsx) — Top navigation header (Plans | Exercises)
-- [components/plan-form.tsx](components/plan-form.tsx) — Plan create/edit form (creates exercises + plan with exerciseIds)
+- [components/plan-form.tsx](components/plan-form.tsx) — Plan create/edit form (uses exercise selector dropdown)
+- [components/exercise-selector.tsx](components/exercise-selector.tsx) — Combobox dropdown for selecting exercises
+- [components/exercise-modal.tsx](components/exercise-modal.tsx) — Modal for quick inline exercise creation
 - [components/plan-list-table.tsx](components/plan-list-table.tsx) — Plan list table with actions
 - [components/exercise-form.tsx](components/exercise-form.tsx) — Exercise create/edit form
 - [components/exercise-list-table.tsx](components/exercise-list-table.tsx) — Exercise list table with actions
@@ -231,7 +233,7 @@ Create the exercise list and detail pages for managing standalone exercises.
 
 ## Phase 3: Plan Form Refactoring
 
-- [ ] Complete
+- [x] Complete
 
 ### Goals
 Replace the inline exercise creation in plan form with a dropdown selector and "Create new" modal.
@@ -267,63 +269,63 @@ Replace the inline exercise creation in plan form with a dropdown selector and "
    - [app/plan/create/page.tsx](app/plan/create/page.tsx): Works with new form structure
    - [app/plan/[id]/edit/page.tsx](app/plan/[id]/edit/page.tsx): Load plan's exercises by ID for initial form state
 
+6. **Update workout page** ([app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx))
+   - Derive exercises from plan's exerciseIds and the exercise store via `useMemo`
+   - Workout state tracks `done` status per exercise (session-only)
+   - On workout end, state is discarded
+
+7. **Update E2E tests** ([e2e/](e2e/))
+   - Updated create-plan tests for new dropdown flow
+   - Updated edit-plan tests for exercise selection
+   - Updated workout tests for new data flow
+   - Added test helper `createExercise` for exercise CRUD via UI
+   - Added test helper `createPlan` for plan creation via dropdown selector
+
+### Bug Fix: Infinite re-render loop in plan detail and workout pages
+
+Both [app/plan/[id]/page.tsx](app/plan/[id]/page.tsx) and [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) initially used `useEffect` + `getExercisesByIds(plan.exerciseIds)` to load exercises. This caused an infinite loop because `plan.exerciseIds` is an array — `useSyncExternalStore` re-parses JSON from localStorage on each subscription event, producing a new array reference every time. React sees it as a changed `useEffect` dependency, re-fires the effect, which triggers state updates, which re-renders, and the loop repeats, freezing the browser.
+
+**Fix**: Replaced async `useEffect` + `getExercisesByIds` with synchronous `useMemo` derivation from `allExercises` (already available via `useSyncExternalStore`). This eliminates the effect-based loop since `useMemo` doesn't trigger side effects.
+
 ### Verification
-- [ ] Plan form shows dropdown instead of inline exercise inputs
-- [ ] Can select existing exercises from dropdown
-- [ ] Can create new exercise via modal from dropdown
-- [ ] Selected exercises display in plan form with remove option
-- [ ] Saving plan stores only exercise IDs
-- [ ] Plan detail page correctly displays exercises fetched by ID
-- [ ] Edit plan page loads existing exercises correctly
+- [x] Plan form shows dropdown instead of inline exercise inputs
+- [x] Can select existing exercises from dropdown
+- [x] Can create new exercise via modal from dropdown
+- [x] Selected exercises display in plan form with remove option
+- [x] Saving plan stores only exercise IDs
+- [x] Plan detail page correctly displays exercises fetched by ID
+- [x] Edit plan page loads existing exercises correctly
+- [x] Workout page loads exercises from standalone storage
+- [x] Can check off exercises during workout
+- [x] Can modify weight/reps during workout (session-only)
+- [x] Completing workout works correctly
+- [x] All 24 E2E tests pass
+- [x] No infinite re-render loops
 
 ---
 
-## Phase 4: Workout Page Updates & Cleanup
+## Phase 4: Cleanup & Final Testing
 
 - [ ] Complete
 
 ### Goals
-Update workout tracking to work with standalone exercises and clean up deprecated code.
+Clean up deprecated code and run final migration testing. Workout page updates and E2E tests were completed in Phase 3.
 
 ### Steps
 
-1. **Update workout page** ([app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx))
-   - Fetch exercises by ID from exercise storage
-   - Workout state needs to track `done` status per exercise
-   - Store workout state in local component state (session-only)
-   - On workout end, state is discarded
-
-2. **Handle weight/reps during workout**
-   - Standalone exercise has default weight/reps
-   - During workout, user can modify - these are session-only values
-   - On workout end, modifications are discarded (or optionally prompt to update exercise defaults)
-
-3. **Update plan storage** ([lib/storage.ts](lib/storage.ts))
-   - Remove old exercise-inline logic
-   - Ensure `savePlan` works with `exerciseIds` only
-
-4. **Clean up old code**
-   - Remove unused `exerciseSchema` fields if no longer needed
-   - Remove old inline exercise form components if any
+1. **Clean up old code**
+   - Remove unused `legacyExerciseSchema` / `legacyWorkoutPlanSchema` if no longer needed
+   - Remove old inline exercise form components if any remain
    - Update any remaining references to `plan.exercises`
+   - Remove `flexibleWorkoutPlanSchema` once migration period is over
 
-5. **Update E2E tests** ([e2e/](e2e/))
-   - Update create-plan tests for new dropdown flow
-   - Update edit-plan tests for exercise selection
-   - Update workout tests for new data flow
-   - Add new tests for exercise CRUD
-
-6. **Final migration testing**
+2. **Final migration testing**
    - Test fresh install (no localStorage)
    - Test with existing plans (migration runs)
    - Verify all features work post-migration
 
 ### Verification
-- [ ] Workout page loads exercises from standalone storage
-- [ ] Can check off exercises during workout
-- [ ] Can modify weight/reps during workout (session-only)
-- [ ] Completing workout works correctly
-- [ ] All E2E tests pass
+- [ ] No unused legacy types or schemas remain
 - [ ] No console errors or type errors
 - [ ] Migration works for existing users
 - [ ] Fresh installs work without issues

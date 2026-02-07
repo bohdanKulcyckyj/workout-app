@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useCallback, useEffect, useRef } from "react";
+import { use, useState, useCallback, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
@@ -48,10 +48,25 @@ export default function WorkoutModePage({
   const { id } = use(params);
   const router = useRouter();
   const { plan, isLoading } = usePlan(id);
-  const { getExercisesByIds } = useExercises();
+  const { exercises: allExercises } = useExercises();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [exitDestination, setExitDestination] = useState<string>("/");
   const [exercisesLoaded, setExercisesLoaded] = useState(false);
+
+  // Derive workout exercises from plan's exerciseIds and the exercise store
+  const initialWorkoutExercises = useMemo((): WorkoutExercise[] => {
+    if (!plan?.exerciseIds) return [];
+    return plan.exerciseIds
+      .map((eid) => allExercises.find((e) => e.id === eid))
+      .filter(Boolean)
+      .map((e) => ({
+        id: e!.id,
+        label: e!.label,
+        weight: e!.weight ?? 0,
+        reps: e!.reps ?? 0,
+        done: false,
+      }));
+  }, [plan?.exerciseIds, allExercises]);
 
   const { register, control, getValues, setValue, watch, reset } =
     useForm<WorkoutFormValues>({
@@ -60,24 +75,13 @@ export default function WorkoutModePage({
       },
     });
 
-  // Load exercises from standalone storage and initialize workout state
+  // Initialize workout form once when exercises are available
   useEffect(() => {
-    if (plan?.exerciseIds && !exercisesLoaded) {
-      getExercisesByIds(plan.exerciseIds).then((standaloneExercises) => {
-        const workoutExercises: WorkoutExercise[] = standaloneExercises.map(
-          (e) => ({
-            id: e.id,
-            label: e.label,
-            weight: e.weight ?? 0,
-            reps: e.reps ?? 0,
-            done: false,
-          })
-        );
-        reset({ exercises: workoutExercises });
-        setExercisesLoaded(true);
-      });
+    if (initialWorkoutExercises.length > 0 && !exercisesLoaded) {
+      reset({ exercises: initialWorkoutExercises });
+      setExercisesLoaded(true);
     }
-  }, [plan?.exerciseIds, getExercisesByIds, reset, exercisesLoaded]);
+  }, [initialWorkoutExercises, reset, exercisesLoaded]);
 
   const { fields } = useFieldArray({
     control,

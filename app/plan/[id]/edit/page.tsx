@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -17,22 +17,9 @@ export default function EditPlanPage({
   const { id } = use(params);
   const router = useRouter();
   const { plan, isLoading, savePlan } = usePlan(id);
-  const { saveExercise, getExercisesByIds } = useExercises();
-  const [initialExercises, setInitialExercises] = useState<StandaloneExercise[]>([]);
-  const [exercisesLoading, setExercisesLoading] = useState(true);
+  const { exercises, saveExercise } = useExercises();
 
-  useEffect(() => {
-    if (plan?.exerciseIds) {
-      getExercisesByIds(plan.exerciseIds).then((exercises) => {
-        setInitialExercises(exercises);
-        setExercisesLoading(false);
-      });
-    } else if (!isLoading) {
-      setExercisesLoading(false);
-    }
-  }, [plan?.exerciseIds, getExercisesByIds, isLoading]);
-
-  if (isLoading || exercisesLoading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-muted-foreground">Loading...</div>
@@ -57,14 +44,13 @@ export default function EditPlanPage({
     );
   }
 
-  async function handleSave(updatedPlan: WorkoutPlan, exercises: StandaloneExercise[]) {
-    // Save all exercises first
-    for (const exercise of exercises) {
-      await saveExercise(exercise);
-    }
-    // Then save the plan
+  async function handleSave(updatedPlan: WorkoutPlan) {
     await savePlan(updatedPlan);
     router.push(`/plan/${updatedPlan.id}`);
+  }
+
+  async function handleExerciseCreate(exercise: StandaloneExercise) {
+    await saveExercise(exercise);
   }
 
   return (
@@ -84,8 +70,9 @@ export default function EditPlanPage({
 
       <PlanForm
         initialPlan={plan}
-        initialExercises={initialExercises}
+        allExercises={exercises}
         onSave={handleSave}
+        onExerciseCreate={handleExerciseCreate}
         submitLabel="Save Changes"
       />
     </div>

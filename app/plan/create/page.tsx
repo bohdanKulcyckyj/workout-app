@@ -10,16 +10,15 @@ import type { WorkoutPlan, StandaloneExercise } from "@/lib/types";
 export default function CreatePlanPage() {
   const router = useRouter();
   const { savePlan } = usePlans();
-  const { saveExercise } = useExercises();
+  const { exercises, saveExercise } = useExercises();
 
-  async function handleSave(plan: WorkoutPlan, exercises: StandaloneExercise[]) {
-    // Save all exercises first
-    for (const exercise of exercises) {
-      await saveExercise(exercise);
-    }
-    // Then save the plan
+  async function handleSave(plan: WorkoutPlan) {
     await savePlan(plan);
     router.push(`/plan/${plan.id}`);
+  }
+
+  async function handleExerciseCreate(exercise: StandaloneExercise) {
+    await saveExercise(exercise);
   }
 
   return (
@@ -37,7 +36,12 @@ export default function CreatePlanPage() {
         <h1 className="text-2xl font-bold">Create New Plan</h1>
       </div>
 
-      <PlanForm onSave={handleSave} submitLabel="Create" />
+      <PlanForm
+        allExercises={exercises}
+        onSave={handleSave}
+        onExerciseCreate={handleExerciseCreate}
+        submitLabel="Create"
+      />
     </div>
   );
 }

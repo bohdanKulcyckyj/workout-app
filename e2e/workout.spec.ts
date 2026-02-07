@@ -1,42 +1,15 @@
 import { test, expect } from "@playwright/test";
-import { clearStorage } from "./helpers";
+import { clearStorage, createExercise, createPlan } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   await clearStorage(page);
 });
 
-/** Helper: create a plan through the UI and return the detail page URL. */
-async function createPlan(
-  page: import("@playwright/test").Page,
-  name: string,
-  exercises: { name: string; weight: string; reps: string }[]
-) {
-  await page.goto("/plan/create");
-  await page.getByLabel("Plan Name").fill(name);
-
-  const rows = page.locator("tbody tr");
-
-  for (let i = 0; i < exercises.length; i++) {
-    if (i > 0) {
-      await page.getByRole("button", { name: /add exercise/i }).click();
-    }
-    const row = rows.nth(i);
-    await row.getByPlaceholder("Exercise name").fill(exercises[i].name);
-    await row.getByRole("spinbutton").nth(0).fill(exercises[i].weight);
-    await row.getByRole("spinbutton").nth(1).fill(exercises[i].reps);
-  }
-
-  await page.getByRole("button", { name: "Create" }).click();
-  await expect(page).toHaveURL(/\/plan\/.+/);
-  return page.url();
-}
-
 test.describe("Workout Tracking", () => {
   test("can start workout from plan detail", async ({ page }) => {
-    await createPlan(page, "Push Day", [
-      { name: "Bench Press", weight: "60", reps: "8" },
-      { name: "Overhead Press", weight: "30", reps: "10" },
-    ]);
+    await createExercise(page, "Bench Press", { weight: "60", reps: "8" });
+    await createExercise(page, "Overhead Press", { weight: "30", reps: "10" });
+    await createPlan(page, "Push Day", ["Bench Press", "Overhead Press"]);
 
     // Click "Start" link on detail page
     await page.getByRole("link", { name: /start/i }).click();
@@ -51,9 +24,8 @@ test.describe("Workout Tracking", () => {
   });
 
   test("can start workout from home page", async ({ page }) => {
-    await createPlan(page, "Pull Day", [
-      { name: "Deadlift", weight: "100", reps: "5" },
-    ]);
+    await createExercise(page, "Deadlift", { weight: "100", reps: "5" });
+    await createPlan(page, "Pull Day", ["Deadlift"]);
 
     await page.goto("/");
     await expect(page.getByText("Pull Day")).toBeVisible();
@@ -70,10 +42,9 @@ test.describe("Workout Tracking", () => {
   });
 
   test("can check off exercises", async ({ page }) => {
-    await createPlan(page, "Push Day", [
-      { name: "Bench Press", weight: "60", reps: "8" },
-      { name: "Overhead Press", weight: "30", reps: "10" },
-    ]);
+    await createExercise(page, "Bench Press", { weight: "60", reps: "8" });
+    await createExercise(page, "Overhead Press", { weight: "30", reps: "10" });
+    await createPlan(page, "Push Day", ["Bench Press", "Overhead Press"]);
 
     await page.getByRole("link", { name: /start/i }).click();
     await expect(page).toHaveURL(/\/plan\/.+\/workout/);
@@ -95,9 +66,8 @@ test.describe("Workout Tracking", () => {
   });
 
   test("can modify weight and reps during workout", async ({ page }) => {
-    await createPlan(page, "Push Day", [
-      { name: "Bench Press", weight: "60", reps: "8" },
-    ]);
+    await createExercise(page, "Bench Press", { weight: "60", reps: "8" });
+    await createPlan(page, "Push Day", ["Bench Press"]);
 
     await page.getByRole("link", { name: /start/i }).click();
     await expect(page).toHaveURL(/\/plan\/.+\/workout/);
@@ -116,9 +86,8 @@ test.describe("Workout Tracking", () => {
   });
 
   test("completing all exercises triggers confetti", async ({ page }) => {
-    await createPlan(page, "Quick Workout", [
-      { name: "Push-ups", weight: "0", reps: "20" },
-    ]);
+    await createExercise(page, "Push-ups", { weight: "0", reps: "20" });
+    await createPlan(page, "Quick Workout", ["Push-ups"]);
 
     await page.getByRole("link", { name: /start/i }).click();
     await expect(page).toHaveURL(/\/plan\/.+\/workout/);
@@ -142,9 +111,8 @@ test.describe("Workout Tracking", () => {
   });
 
   test("end workout with all exercises complete", async ({ page }) => {
-    await createPlan(page, "Push Day", [
-      { name: "Bench Press", weight: "60", reps: "8" },
-    ]);
+    await createExercise(page, "Bench Press", { weight: "60", reps: "8" });
+    await createPlan(page, "Push Day", ["Bench Press"]);
 
     await page.getByRole("link", { name: /start/i }).click();
     await expect(page).toHaveURL(/\/plan\/.+\/workout/);
@@ -170,10 +138,9 @@ test.describe("Workout Tracking", () => {
   test("end workout with incomplete exercises shows confirmation", async ({
     page,
   }) => {
-    await createPlan(page, "Push Day", [
-      { name: "Bench Press", weight: "60", reps: "8" },
-      { name: "Overhead Press", weight: "30", reps: "10" },
-    ]);
+    await createExercise(page, "Bench Press", { weight: "60", reps: "8" });
+    await createExercise(page, "Overhead Press", { weight: "30", reps: "10" });
+    await createPlan(page, "Push Day", ["Bench Press", "Overhead Press"]);
 
     await page.getByRole("link", { name: /start/i }).click();
     await expect(page).toHaveURL(/\/plan\/.+\/workout/);
@@ -199,9 +166,8 @@ test.describe("Workout Tracking", () => {
   });
 
   test("can cancel end workout confirmation", async ({ page }) => {
-    await createPlan(page, "Push Day", [
-      { name: "Bench Press", weight: "60", reps: "8" },
-    ]);
+    await createExercise(page, "Bench Press", { weight: "60", reps: "8" });
+    await createPlan(page, "Push Day", ["Bench Press"]);
 
     await page.getByRole("link", { name: /start/i }).click();
     await expect(page).toHaveURL(/\/plan\/.+\/workout/);

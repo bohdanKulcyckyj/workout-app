@@ -1,13 +1,12 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pencil, Play, ArrowLeft } from "lucide-react";
 import { usePlan, useExercises } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { ExerciseTable } from "@/components/exercise-table";
-import type { StandaloneExercise } from "@/lib/types";
 
 export default function PlanDetailPage({
   params,
@@ -17,14 +16,14 @@ export default function PlanDetailPage({
   const { id } = use(params);
   const router = useRouter();
   const { plan, isLoading } = usePlan(id);
-  const { getExercisesByIds } = useExercises();
-  const [exercises, setExercises] = useState<StandaloneExercise[]>([]);
+  const { exercises: allExercises } = useExercises();
 
-  useEffect(() => {
-    if (plan?.exerciseIds) {
-      getExercisesByIds(plan.exerciseIds).then(setExercises);
-    }
-  }, [plan?.exerciseIds, getExercisesByIds]);
+  const exercises = useMemo(() => {
+    if (!plan?.exerciseIds) return [];
+    return plan.exerciseIds
+      .map((eid) => allExercises.find((e) => e.id === eid))
+      .filter(Boolean) as typeof allExercises;
+  }, [plan?.exerciseIds, allExercises]);
 
   if (isLoading) {
     return (
