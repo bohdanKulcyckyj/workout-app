@@ -39,7 +39,9 @@ export function usePlans() {
 
   const raw = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const parsed = workoutPlansSchema.safeParse(JSON.parse(raw));
-  const plans: WorkoutPlan[] = parsed.success ? parsed.data : [];
+  const plans: WorkoutPlan[] = parsed.success
+    ? parsed.data.toSorted((a, b) => a.name.localeCompare(b.name))
+    : [];
 
   const refresh = useCallback(() => {
     window.dispatchEvent(new Event("plans-updated"));

@@ -39,7 +39,9 @@ export function useExercises() {
 
   const raw = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const parsed = standaloneExercisesSchema.safeParse(JSON.parse(raw));
-  const exercises: StandaloneExercise[] = parsed.success ? parsed.data : [];
+  const exercises: StandaloneExercise[] = parsed.success
+    ? parsed.data.toSorted((a, b) => a.label.localeCompare(b.label))
+    : [];
 
   const refresh = useCallback(() => {
     window.dispatchEvent(new Event("exercises-updated"));
