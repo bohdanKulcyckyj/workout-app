@@ -18,12 +18,13 @@ export default function PlanDetailPage({
   const { plan, isLoading } = usePlan(id);
   const { exercises: allExercises } = useExercises();
 
+  const exerciseIds = plan?.exerciseIds;
   const exercises = useMemo(() => {
-    if (!plan?.exerciseIds) return [];
-    return plan.exerciseIds
+    if (!exerciseIds) return [];
+    return exerciseIds
       .map((eid) => allExercises.find((e) => e.id === eid))
       .filter(Boolean) as typeof allExercises;
-  }, [plan?.exerciseIds, allExercises]);
+  }, [exerciseIds, allExercises]);
 
   if (isLoading) {
     return (
