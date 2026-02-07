@@ -1,41 +1,14 @@
 import { test, expect } from "@playwright/test";
-import { clearStorage } from "./helpers";
+import { clearStorage, createExercise, createPlan } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   await clearStorage(page);
 });
 
-/** Helper: create a plan through the UI and return the detail page URL. */
-async function createPlan(
-  page: import("@playwright/test").Page,
-  name: string,
-  exercises: { name: string; weight: string; reps: string }[]
-) {
-  await page.goto("/plan/create");
-  await page.getByLabel("Plan Name").fill(name);
-
-  const rows = page.locator("tbody tr");
-
-  for (let i = 0; i < exercises.length; i++) {
-    if (i > 0) {
-      await page.getByRole("button", { name: /add exercise/i }).click();
-    }
-    const row = rows.nth(i);
-    await row.getByPlaceholder("Exercise name").fill(exercises[i].name);
-    await row.getByRole("spinbutton").nth(0).fill(exercises[i].weight);
-    await row.getByRole("spinbutton").nth(1).fill(exercises[i].reps);
-  }
-
-  await page.getByRole("button", { name: "Create" }).click();
-  await expect(page).toHaveURL(/\/plan\/.+/);
-  return page.url();
-}
-
 test.describe("Delete Plan", () => {
   test("can delete a plan from home page", async ({ page }) => {
-    await createPlan(page, "Push Day", [
-      { name: "Bench Press", weight: "60", reps: "8" },
-    ]);
+    await createExercise(page, "Bench Press", { weight: "60", reps: "8" });
+    await createPlan(page, "Push Day", ["Bench Press"]);
 
     await page.goto("/");
     await expect(page.getByText("Push Day")).toBeVisible();
@@ -62,9 +35,8 @@ test.describe("Delete Plan", () => {
   });
 
   test("delete confirmation dialog can be cancelled", async ({ page }) => {
-    await createPlan(page, "Pull Day", [
-      { name: "Deadlift", weight: "100", reps: "5" },
-    ]);
+    await createExercise(page, "Deadlift", { weight: "100", reps: "5" });
+    await createPlan(page, "Pull Day", ["Deadlift"]);
 
     await page.goto("/");
     await expect(page.getByText("Pull Day")).toBeVisible();
@@ -84,9 +56,8 @@ test.describe("Delete Plan", () => {
   });
 
   test("deleting last plan shows empty state", async ({ page }) => {
-    await createPlan(page, "Only Plan", [
-      { name: "Curl", weight: "15", reps: "12" },
-    ]);
+    await createExercise(page, "Curl", { weight: "15", reps: "12" });
+    await createPlan(page, "Only Plan", ["Curl"]);
 
     await page.goto("/");
     await expect(page.getByText("Only Plan")).toBeVisible();

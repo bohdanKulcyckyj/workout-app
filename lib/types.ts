@@ -1,22 +1,25 @@
 import { z } from "zod";
 
-export const exerciseSchema = z.object({
+// Standalone exercise entity - stored independently and referenced by plans
+export const standaloneExerciseSchema = z.object({
   id: z.string(),
-  name: z.string(),
-  weight: z.number(),
-  reps: z.number(),
-  done: z.boolean(),
+  label: z.string().min(1),
+  description: z.string().optional(),
+  weight: z.number().optional(),
+  reps: z.number().optional(),
 });
 
+// Workout plan schema - references exercise IDs
 export const workoutPlanSchema = z.object({
   id: z.string(),
   name: z.string(),
-  exercises: z.array(exerciseSchema),
+  exerciseIds: z.array(z.string()),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 
 export const workoutPlansSchema = z.array(workoutPlanSchema);
+export const standaloneExercisesSchema = z.array(standaloneExerciseSchema);
 
-export type Exercise = z.infer<typeof exerciseSchema>;
+export type StandaloneExercise = z.infer<typeof standaloneExerciseSchema>;
 export type WorkoutPlan = z.infer<typeof workoutPlanSchema>;

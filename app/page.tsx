@@ -2,17 +2,23 @@
 
 import Link from "next/link";
 import { Plus, Dumbbell } from "lucide-react";
-import { storage } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
 import { PlanListTable } from "@/components/plan-list-table";
-import { useLocalStoragePlans } from "@/lib/use-local-storage-plans";
+import { usePlans } from "@/lib/hooks";
 
 export default function HomePage() {
-  const { plans, refresh } = useLocalStoragePlans();
+  const { plans, isLoading, deletePlan } = usePlans();
 
   function handleDelete(id: string) {
-    storage.deletePlan(id);
-    refresh();
+    deletePlan(id);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
   }
 
   return (

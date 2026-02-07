@@ -8,10 +8,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Exercise } from "@/lib/types";
+import type { StandaloneExercise } from "@/lib/types";
 
 interface ExerciseTableProps {
-  exercises: Exercise[];
+  exercises: StandaloneExercise[];
 }
 
 export function ExerciseTable({ exercises }: ExerciseTableProps) {
@@ -34,9 +34,9 @@ export function ExerciseTable({ exercises }: ExerciseTableProps) {
         ) : (
           exercises.map((exercise) => (
             <TableRow key={exercise.id}>
-              <TableCell className="pl-0 font-medium max-w-0 truncate">{exercise.name}</TableCell>
-              <TableCell className="text-right">{exercise.weight} kg</TableCell>
-              <TableCell className="text-right pr-0">{exercise.reps}</TableCell>
+              <TableCell className="pl-0 font-medium max-w-0 truncate">{exercise.label}</TableCell>
+              <TableCell className="text-right">{exercise.weight ?? "-"} kg</TableCell>
+              <TableCell className="text-right pr-0">{exercise.reps ?? "-"}</TableCell>
             </TableRow>
           ))
         )}

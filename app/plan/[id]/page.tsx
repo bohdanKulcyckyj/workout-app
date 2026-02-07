@@ -1,10 +1,10 @@
 "use client";
 
-import { use } from "react";
+import { use, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pencil, Play, ArrowLeft } from "lucide-react";
-import { useLocalStoragePlan } from "@/lib/use-local-storage-plans";
+import { usePlan, useExercises } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { ExerciseTable } from "@/components/exercise-table";
 
@@ -15,7 +15,24 @@ export default function PlanDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { plan } = useLocalStoragePlan(id);
+  const { plan, isLoading } = usePlan(id);
+  const { exercises: allExercises } = useExercises();
+
+  const exerciseIds = plan?.exerciseIds;
+  const exercises = useMemo(() => {
+    if (!exerciseIds) return [];
+    return exerciseIds
+      .map((eid) => allExercises.find((e) => e.id === eid))
+      .filter(Boolean) as typeof allExercises;
+  }, [exerciseIds, allExercises]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   if (!plan) {
     return (
@@ -59,7 +76,7 @@ export default function PlanDetailPage({
         </Button>
       </div>
 
-      <ExerciseTable exercises={plan.exercises} />
+      <ExerciseTable exercises={exercises} />
     </div>
   );
 }

@@ -1,13 +1,13 @@
 "use client";
 
-import { use, useState, useCallback, useEffect, useRef } from "react";
+import { use, useState, useCallback, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import confetti from "canvas-confetti";
 import { ArrowLeft } from "lucide-react";
-import { storage } from "@/lib/storage";
-import { useLocalStoragePlan } from "@/lib/use-local-storage-plans";
+import { usePlan, useExercises } from "@/lib/hooks";
+import { useExerciseRepository } from "@/lib/repositories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,10 +27,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { Exercise } from "@/lib/types";
+
+// Workout exercise: standalone exercise data + session-only tracking
+interface WorkoutExercise {
+  id: string;
+  label: string;
+  weight: number;
+  reps: number;
+  done: boolean;
+}
 
 interface WorkoutFormValues {
-  exercises: Exercise[];
+  exercises: WorkoutExercise[];
 }
 
 export default function WorkoutModePage({
@@ -40,23 +48,42 @@ export default function WorkoutModePage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { plan } = useLocalStoragePlan(id);
+  const { plan, isLoading } = usePlan(id);
+  const { exercises: allExercises } = useExercises();
+  const exerciseRepository = useExerciseRepository();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [exitDestination, setExitDestination] = useState<string>("/");
+  const [exercisesLoaded, setExercisesLoaded] = useState(false);
+
+  // Derive workout exercises from plan's exerciseIds and the exercise store
+  const initialWorkoutExercises = useMemo((): WorkoutExercise[] => {
+    if (!plan?.exerciseIds) return [];
+    return plan.exerciseIds
+      .map((eid) => allExercises.find((e) => e.id === eid))
+      .filter(Boolean)
+      .map((e) => ({
+        id: e!.id,
+        label: e!.label,
+        weight: e!.weight ?? 0,
+        reps: e!.reps ?? 0,
+        done: false,
+      }));
+  }, [plan?.exerciseIds, allExercises]);
 
   const { register, control, getValues, setValue, watch, reset } =
     useForm<WorkoutFormValues>({
       defaultValues: {
-        exercises: plan?.exercises ?? [],
+        exercises: [],
       },
     });
 
+  // Initialize workout form once when exercises are available
   useEffect(() => {
-    if (plan) {
-      reset({ exercises: plan.exercises });
+    if (initialWorkoutExercises.length > 0 && !exercisesLoaded) {
+      reset({ exercises: initialWorkoutExercises });
+      setExercisesLoaded(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan?.id]);
+  }, [initialWorkoutExercises, reset, exercisesLoaded]);
 
   const { fields } = useFieldArray({
     control,
@@ -91,17 +118,6 @@ export default function WorkoutModePage({
     frame();
   }, []);
 
-  const persistToStorage = useCallback(() => {
-    if (!plan) return;
-    const current = getValues();
-    const now = new Date().toISOString();
-    storage.savePlan({
-      ...plan,
-      exercises: current.exercises,
-      updatedAt: now,
-    });
-  }, [plan, getValues]);
-
   function handleExit(destination: string) {
     const exercises = getValues("exercises");
     const allDone = exercises.every((e) => e.done);
@@ -114,16 +130,29 @@ export default function WorkoutModePage({
     }
   }
 
-  function finishWorkout(destination?: string) {
-    if (!plan) return;
-    const exercises = getValues("exercises");
-    const now = new Date().toISOString();
-    storage.savePlan({
-      ...plan,
-      exercises: exercises.map((e) => ({ ...e, done: false })),
-      updatedAt: now,
-    });
+  async function finishWorkout(destination?: string) {
+    // Persist any weight/reps changes back to the exercise entities
+    const currentExercises = getValues("exercises");
+    for (const we of currentExercises) {
+      const stored = allExercises.find((e) => e.id === we.id);
+      if (stored && (stored.weight !== we.weight || stored.reps !== we.reps)) {
+        await exerciseRepository.save({
+          ...stored,
+          weight: we.weight,
+          reps: we.reps,
+        });
+      }
+    }
+    window.dispatchEvent(new Event("exercises-updated"));
     router.push(destination ?? exitDestination);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
   }
 
   if (!plan) {
@@ -187,7 +216,6 @@ export default function WorkoutModePage({
                     checked={isDone}
                     onCheckedChange={(checked) => {
                       setValue(`exercises.${index}.done`, checked === true);
-                      persistToStorage();
 
                       const exercises = getValues("exercises");
                       const allDone = exercises.every((e) => e.done);
@@ -198,13 +226,13 @@ export default function WorkoutModePage({
                         hasCelebratedRef.current = false;
                       }
                     }}
-                    aria-label={`Mark ${field.name} as done`}
+                    aria-label={`Mark ${field.label} as done`}
                   />
                 </TableCell>
                 <TableCell
                   className={`max-w-0 truncate ${isDone ? "line-through text-muted-foreground" : "font-medium"}`}
                 >
-                  {field.name}
+                  {field.label}
                 </TableCell>
                 <TableCell className="px-1">
                   <Input
@@ -214,7 +242,6 @@ export default function WorkoutModePage({
                     className="h-8 text-sm text-right"
                     {...register(`exercises.${index}.weight`, {
                       valueAsNumber: true,
-                      onBlur: () => persistToStorage(),
                     })}
                   />
                 </TableCell>
@@ -225,7 +252,6 @@ export default function WorkoutModePage({
                     className="h-8 text-sm text-right"
                     {...register(`exercises.${index}.reps`, {
                       valueAsNumber: true,
-                      onBlur: () => persistToStorage(),
                     })}
                   />
                 </TableCell>

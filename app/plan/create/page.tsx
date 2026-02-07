@@ -2,17 +2,23 @@
 
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { storage } from "@/lib/storage";
+import { usePlans, useExercises } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { PlanForm } from "@/components/plan-form";
-import type { WorkoutPlan } from "@/lib/types";
+import type { WorkoutPlan, StandaloneExercise } from "@/lib/types";
 
 export default function CreatePlanPage() {
   const router = useRouter();
+  const { savePlan } = usePlans();
+  const { exercises, saveExercise } = useExercises();
 
-  function handleSave(plan: WorkoutPlan) {
-    storage.savePlan(plan);
+  async function handleSave(plan: WorkoutPlan) {
+    await savePlan(plan);
     router.push(`/plan/${plan.id}`);
+  }
+
+  async function handleExerciseCreate(exercise: StandaloneExercise) {
+    await saveExercise(exercise);
   }
 
   return (
@@ -30,7 +36,12 @@ export default function CreatePlanPage() {
         <h1 className="text-2xl font-bold">Create New Plan</h1>
       </div>
 
-      <PlanForm onSave={handleSave} submitLabel="Create" />
+      <PlanForm
+        allExercises={exercises}
+        onSave={handleSave}
+        onExerciseCreate={handleExerciseCreate}
+        submitLabel="Create"
+      />
     </div>
   );
 }

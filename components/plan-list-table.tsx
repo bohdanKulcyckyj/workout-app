@@ -43,8 +43,8 @@ export function PlanListTable({ plans, onDelete }: PlanListTableProps) {
                   {plan.name}
                 </Link>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {plan.exercises.length} exercise
-                  {plan.exercises.length !== 1 ? "s" : ""}
+                  {plan.exerciseIds.length} exercise
+                  {plan.exerciseIds.length !== 1 ? "s" : ""}
                 </p>
               </TableCell>
               <TableCell className="text-right pr-0 w-[120px]">
