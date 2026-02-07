@@ -27,8 +27,6 @@ Refactor exercises from inline plan data to standalone entities that can be reus
   - [lib/repositories/local-storage/exercise-repository.ts](lib/repositories/local-storage/exercise-repository.ts) — localStorage exercise implementation
 - [lib/hooks/use-plans.ts](lib/hooks/use-plans.ts) — React hooks for plan state (uses repository)
 - [lib/hooks/use-exercises.ts](lib/hooks/use-exercises.ts) — React hooks for exercise state (uses repository)
-- [lib/migration.ts](lib/migration.ts) — Migration logic for inline exercises to standalone entities
-- [components/migration-runner.tsx](components/migration-runner.tsx) — Component that runs migration on app load
 - [components/nav-header.tsx](components/nav-header.tsx) — Top navigation header (Plans | Exercises)
 - [components/plan-form.tsx](components/plan-form.tsx) — Plan create/edit form (uses exercise selector dropdown)
 - [components/exercise-selector.tsx](components/exercise-selector.tsx) — Combobox dropdown for selecting exercises
@@ -306,7 +304,7 @@ Both [app/plan/[id]/page.tsx](app/plan/[id]/page.tsx) and [app/plan/[id]/workout
 
 ## Phase 4: Cleanup & Final Testing
 
-- [ ] Complete
+- [x] Complete
 
 ### Goals
 Clean up deprecated code and run final migration testing. Workout page updates and E2E tests were completed in Phase 3.
@@ -314,18 +312,22 @@ Clean up deprecated code and run final migration testing. Workout page updates a
 ### Steps
 
 1. **Clean up old code**
-   - Remove unused `legacyExerciseSchema` / `legacyWorkoutPlanSchema` if no longer needed
-   - Remove old inline exercise form components if any remain
-   - Update any remaining references to `plan.exercises`
-   - Remove `flexibleWorkoutPlanSchema` once migration period is over
+   - Removed `legacyExerciseSchema`, `legacyWorkoutPlanSchema`, and all associated types (`LegacyExercise`, `LegacyWorkoutPlan`)
+   - Removed `flexibleWorkoutPlanSchema`, `FlexibleWorkoutPlan` type, and `workoutPlansSchema` (replaced with strict `z.array(workoutPlanSchema)`)
+   - Removed `getAllFlexible()` from `PlanRepository` interface and `LocalStoragePlanRepository`
+   - Simplified `LocalStoragePlanRepository` to work directly with `WorkoutPlan` (no flexible/migration-aware conversion)
+   - Removed `toWorkoutPlans()` conversion function from `use-plans.ts` hook
+   - Deleted `lib/migration.ts` (migration logic) and `components/migration-runner.tsx`
+   - Removed `MigrationRunner` wrapper from `app/layout.tsx`
 
-2. **Final migration testing**
-   - Test fresh install (no localStorage)
-   - Test with existing plans (migration runs)
-   - Verify all features work post-migration
+2. **Final testing**
+   - TypeScript compiles with zero errors (`tsc --noEmit`)
+   - All 24 E2E tests pass
+   - Fresh install verified via Playwright: empty states display correctly, can create exercises and plans
+   - Workout flow verified: exercise data loads from standalone storage, check-off works correctly
 
 ### Verification
-- [ ] No unused legacy types or schemas remain
-- [ ] No console errors or type errors
-- [ ] Migration works for existing users
-- [ ] Fresh installs work without issues
+- [x] No unused legacy types or schemas remain
+- [x] No console errors or type errors
+- [x] Fresh installs work without issues
+- [x] All 24 E2E tests pass

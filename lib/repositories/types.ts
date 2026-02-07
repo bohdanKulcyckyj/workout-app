@@ -1,8 +1,7 @@
-import type { WorkoutPlan, StandaloneExercise, FlexibleWorkoutPlan } from "../types";
+import type { WorkoutPlan, StandaloneExercise } from "../types";
 
 export interface PlanRepository {
   getAll(): Promise<WorkoutPlan[]>;
-  getAllFlexible(): Promise<FlexibleWorkoutPlan[]>;
   getById(id: string): Promise<WorkoutPlan | null>;
   save(plan: WorkoutPlan): Promise<void>;
   delete(id: string): Promise<void>;

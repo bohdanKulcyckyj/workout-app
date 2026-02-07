@@ -1,30 +1,14 @@
-import type { WorkoutPlan, FlexibleWorkoutPlan } from "../../types";
+import type { WorkoutPlan } from "../../types";
 import type { PlanRepository } from "../types";
 
 const STORAGE_KEY = "workout-plans";
 
 export class LocalStoragePlanRepository implements PlanRepository {
-  // Get all plans in flexible format (supports both old and new schema)
-  async getAllFlexible(): Promise<FlexibleWorkoutPlan[]> {
+  async getAll(): Promise<WorkoutPlan[]> {
     if (typeof window === "undefined") return [];
     const data = localStorage.getItem(STORAGE_KEY);
     if (!data) return [];
-    return JSON.parse(data) as FlexibleWorkoutPlan[];
-  }
-
-  // Get all plans in new format (only returns migrated plans)
-  async getAll(): Promise<WorkoutPlan[]> {
-    const flexiblePlans = await this.getAllFlexible();
-    // Filter to only plans that have been migrated (have exerciseIds)
-    return flexiblePlans
-      .filter((p) => p.exerciseIds !== undefined)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        exerciseIds: p.exerciseIds!,
-        createdAt: p.createdAt,
-        updatedAt: p.updatedAt,
-      }));
+    return JSON.parse(data) as WorkoutPlan[];
   }
 
   async getById(id: string): Promise<WorkoutPlan | null> {
@@ -33,39 +17,30 @@ export class LocalStoragePlanRepository implements PlanRepository {
   }
 
   async save(plan: WorkoutPlan): Promise<void> {
-    const plans = await this.getAllFlexible();
+    const plans = await this.getAll();
     const index = plans.findIndex((p) => p.id === plan.id);
 
-    // Convert to new format with exerciseIds
-    const newPlan: FlexibleWorkoutPlan = {
-      id: plan.id,
-      name: plan.name,
-      exerciseIds: plan.exerciseIds,
-      createdAt: plan.createdAt,
-      updatedAt: plan.updatedAt,
-    };
-
     if (index >= 0) {
-      plans[index] = newPlan;
+      plans[index] = plan;
     } else {
-      plans.push(newPlan);
+      plans.push(plan);
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(plans));
     window.dispatchEvent(new Event("plans-updated"));
   }
 
   async delete(id: string): Promise<void> {
-    const plans = (await this.getAllFlexible()).filter((p) => p.id !== id);
+    const plans = (await this.getAll()).filter((p) => p.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(plans));
     window.dispatchEvent(new Event("plans-updated"));
   }
 
   async removeExerciseFromAllPlans(exerciseId: string): Promise<void> {
-    const plans = await this.getAllFlexible();
+    const plans = await this.getAll();
     let updated = false;
 
     for (const plan of plans) {
-      if (plan.exerciseIds?.includes(exerciseId)) {
+      if (plan.exerciseIds.includes(exerciseId)) {
         plan.exerciseIds = plan.exerciseIds.filter((id) => id !== exerciseId);
         updated = true;
       }

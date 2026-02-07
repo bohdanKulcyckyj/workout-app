@@ -2,7 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { usePlanRepository } from "../repositories";
-import type { WorkoutPlan, FlexibleWorkoutPlan } from "../types";
+import type { WorkoutPlan } from "../types";
 import { workoutPlansSchema } from "../types";
 
 const STORAGE_KEY = "workout-plans";
@@ -34,25 +34,12 @@ function subscribe(callback: () => void): () => void {
   };
 }
 
-// Convert flexible plans to strict WorkoutPlan format (filter out unmigrated plans)
-function toWorkoutPlans(flexiblePlans: FlexibleWorkoutPlan[]): WorkoutPlan[] {
-  return flexiblePlans
-    .filter((p) => p.exerciseIds !== undefined)
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      exerciseIds: p.exerciseIds!,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt,
-    }));
-}
-
 export function usePlans() {
   const repository = usePlanRepository();
 
   const raw = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const parsed = workoutPlansSchema.safeParse(JSON.parse(raw));
-  const plans: WorkoutPlan[] = parsed.success ? toWorkoutPlans(parsed.data) : [];
+  const plans: WorkoutPlan[] = parsed.success ? parsed.data : [];
 
   const refresh = useCallback(() => {
     window.dispatchEvent(new Event("plans-updated"));
@@ -82,7 +69,7 @@ export function usePlan(id: string) {
 
   const raw = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const parsed = workoutPlansSchema.safeParse(JSON.parse(raw));
-  const plans: WorkoutPlan[] = parsed.success ? toWorkoutPlans(parsed.data) : [];
+  const plans: WorkoutPlan[] = parsed.success ? parsed.data : [];
   const plan = plans.find((p) => p.id === id) ?? null;
 
   const refresh = useCallback(() => {

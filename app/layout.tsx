@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { RepositoryProvider } from "@/lib/repositories";
-import { MigrationRunner } from "@/components/migration-runner";
 import { NavHeader } from "@/components/nav-header";
 import "./globals.css";
 
@@ -37,12 +36,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <RepositoryProvider>
-          <MigrationRunner>
-            <div className="mx-auto max-w-lg px-4 py-6">
-              <NavHeader />
-              {children}
-            </div>
-          </MigrationRunner>
+          <div className="mx-auto max-w-lg px-4 py-6">
+            <NavHeader />
+            {children}
+          </div>
         </RepositoryProvider>
       </body>
     </html>
