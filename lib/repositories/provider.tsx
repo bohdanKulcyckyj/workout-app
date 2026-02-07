@@ -6,6 +6,7 @@ import {
   LocalStoragePlanRepository,
   LocalStorageExerciseRepository,
 } from "./local-storage";
+import { migrateLocalStorage } from "../migrations";
 
 interface RepositoryContextValue {
   planRepository: PlanRepository;
@@ -26,6 +27,9 @@ export function RepositoryProvider({
   exerciseRepository,
 }: RepositoryProviderProps) {
   const value = useMemo(() => {
+    // Migrate legacy data before creating repositories
+    migrateLocalStorage();
+
     const planRepo = planRepository ?? new LocalStoragePlanRepository();
     const exerciseRepo =
       exerciseRepository ?? new LocalStorageExerciseRepository();
