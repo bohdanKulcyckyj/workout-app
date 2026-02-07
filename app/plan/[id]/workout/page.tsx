@@ -7,6 +7,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import confetti from "canvas-confetti";
 import { ArrowLeft } from "lucide-react";
 import { usePlan, useExercises } from "@/lib/hooks";
+import { useExerciseRepository } from "@/lib/repositories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -49,6 +50,7 @@ export default function WorkoutModePage({
   const router = useRouter();
   const { plan, isLoading } = usePlan(id);
   const { exercises: allExercises } = useExercises();
+  const exerciseRepository = useExerciseRepository();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [exitDestination, setExitDestination] = useState<string>("/");
   const [exercisesLoaded, setExercisesLoaded] = useState(false);
@@ -121,16 +123,27 @@ export default function WorkoutModePage({
     const allDone = exercises.every((e) => e.done);
 
     if (allDone) {
-      // All done, just navigate
-      router.push(destination);
+      finishWorkout(destination);
     } else {
       setExitDestination(destination);
       setShowConfirmDialog(true);
     }
   }
 
-  function finishWorkout(destination?: string) {
-    // Session state is discarded, just navigate away
+  async function finishWorkout(destination?: string) {
+    // Persist any weight/reps changes back to the exercise entities
+    const currentExercises = getValues("exercises");
+    for (const we of currentExercises) {
+      const stored = allExercises.find((e) => e.id === we.id);
+      if (stored && (stored.weight !== we.weight || stored.reps !== we.reps)) {
+        await exerciseRepository.save({
+          ...stored,
+          weight: we.weight,
+          reps: we.reps,
+        });
+      }
+    }
+    window.dispatchEvent(new Event("exercises-updated"));
     router.push(destination ?? exitDestination);
   }
 
