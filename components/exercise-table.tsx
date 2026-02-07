@@ -16,7 +16,7 @@ interface ExerciseTableProps {
 
 export function ExerciseTable({ exercises }: ExerciseTableProps) {
   return (
-    <Table>
+    <Table className="table-fixed">
       <TableHeader>
         <TableRow>
           <TableHead className="pl-0">Exercise</TableHead>

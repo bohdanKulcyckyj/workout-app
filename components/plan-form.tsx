@@ -114,7 +114,7 @@ export function PlanForm({
           <h2 className="text-sm font-medium">Exercises</h2>
 
           {selectedExercises.length > 0 && (
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-0">Exercise</TableHead>
@@ -126,7 +126,7 @@ export function PlanForm({
               <TableBody>
                 {selectedExercises.map((exercise) => (
                   <TableRow key={exercise.id}>
-                    <TableCell className="pl-0 font-medium">
+                    <TableCell className="pl-0 font-medium max-w-0 truncate">
                       {exercise.label}
                     </TableCell>
                     <TableCell className="text-right">

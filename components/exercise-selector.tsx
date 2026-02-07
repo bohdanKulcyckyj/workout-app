@@ -54,7 +54,7 @@ export function ExerciseSelector({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent className="min-w-[min(360px,calc(100vw-2rem))] w-[--radix-popover-trigger-width] p-0" align="start">
         <Command>
           <CommandInput placeholder="Search exercises..." />
           <CommandList>
@@ -69,10 +69,10 @@ export function ExerciseSelector({
                       onSelect(exercise.id);
                       setOpen(false);
                     }}
-                    className="cursor-pointer"
+                    className="cursor-pointer overflow-hidden"
                   >
-                    <div className="flex flex-col flex-1">
-                      <span>{exercise.label}</span>
+                    <div className="flex flex-col flex-1 w-0">
+                      <span className="truncate">{exercise.label}</span>
                       {(exercise.weight || exercise.reps) && (
                         <span className="text-xs text-muted-foreground">
                           {exercise.weight && `${exercise.weight} kg`}
