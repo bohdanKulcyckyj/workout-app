@@ -44,6 +44,7 @@ export async function createPlan(
   }
 
   await page.getByRole("button", { name: "Create" }).click();
+  await expect(page).not.toHaveURL("/plan/create");
   await expect(page).toHaveURL(/\/plan\/.+/);
   return page.url();
 }
