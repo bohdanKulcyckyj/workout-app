@@ -96,7 +96,7 @@ export function ExerciseForm({
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <label htmlFor="exercise-weight" className="text-sm font-medium">
-            Default Weight
+            Default Weight (kg)
           </label>
           <Input
             id="exercise-weight"

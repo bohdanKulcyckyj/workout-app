@@ -54,7 +54,7 @@ export function ExerciseListTable({
                 )}
               </TableCell>
               <TableCell className="text-right text-sm text-muted-foreground w-[80px]">
-                {exercise.weight !== undefined && `${exercise.weight} lbs`}
+                {exercise.weight !== undefined && `${exercise.weight} kg`}
               </TableCell>
               <TableCell className="text-right text-sm text-muted-foreground w-[60px]">
                 {exercise.reps !== undefined && `${exercise.reps} reps`}

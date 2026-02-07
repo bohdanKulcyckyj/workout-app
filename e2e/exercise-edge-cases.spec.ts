@@ -29,11 +29,11 @@ test.describe("Exercise Edge Cases", () => {
     });
 
     await page.goto("/exercise");
-    await expect(page.getByText("12.5 lbs")).toBeVisible();
+    await expect(page.getByText("12.5 kg")).toBeVisible();
 
     // Verify in detail page too
     await page.getByRole("link", { name: "Dumbbell Fly" }).click();
-    await expect(page.getByText("12.5 lbs")).toBeVisible();
+    await expect(page.getByText("12.5 kg")).toBeVisible();
   });
 
   test("editing exercise updates it in plan detail", async ({ page }) => {
@@ -95,12 +95,12 @@ test.describe("Exercise Edge Cases", () => {
     // Reload and verify data is still there
     await page.goto("/exercise");
     await expect(page.getByText("Deadlift", { exact: true })).toBeVisible();
-    await expect(page.getByText("120 lbs")).toBeVisible();
+    await expect(page.getByText("120 kg")).toBeVisible();
 
     // Navigate to detail and verify all fields
     await page.getByRole("link", { name: "Deadlift" }).click();
     await expect(page.getByText("Conventional deadlift")).toBeVisible();
-    await expect(page.getByText("120 lbs")).toBeVisible();
+    await expect(page.getByText("120 kg")).toBeVisible();
   });
 
   test("creating multiple exercises shows them all in list", async ({

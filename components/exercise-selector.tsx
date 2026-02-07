@@ -75,7 +75,7 @@ export function ExerciseSelector({
                       <span>{exercise.label}</span>
                       {(exercise.weight || exercise.reps) && (
                         <span className="text-xs text-muted-foreground">
-                          {exercise.weight && `${exercise.weight}kg`}
+                          {exercise.weight && `${exercise.weight} kg`}
                           {exercise.weight && exercise.reps && " · "}
                           {exercise.reps && `${exercise.reps} reps`}
                         </span>

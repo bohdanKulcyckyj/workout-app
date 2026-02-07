@@ -95,7 +95,7 @@ export default function ExerciseDetailPage({
               Default Weight
             </h2>
             <p className="text-sm">
-              {exercise.weight !== undefined ? `${exercise.weight} lbs` : "—"}
+              {exercise.weight !== undefined ? `${exercise.weight} kg` : "—"}
             </p>
           </div>
           <div>

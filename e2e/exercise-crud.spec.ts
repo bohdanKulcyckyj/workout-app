@@ -25,11 +25,11 @@ test.describe("Exercise List", () => {
     await page.goto("/exercise");
 
     await expect(page.getByText("Bench Press")).toBeVisible();
-    await expect(page.getByText("60 lbs")).toBeVisible();
+    await expect(page.getByText("60 kg")).toBeVisible();
     await expect(page.getByText("8 reps")).toBeVisible();
 
     await expect(page.getByText("Squat")).toBeVisible();
-    await expect(page.getByText("100 lbs")).toBeVisible();
+    await expect(page.getByText("100 kg")).toBeVisible();
     await expect(page.getByText("5 reps")).toBeVisible();
   });
 
@@ -74,7 +74,7 @@ test.describe("Create Exercise", () => {
     // Redirects to exercise list
     await expect(page).toHaveURL("/exercise");
     await expect(page.getByText("Romanian Deadlift")).toBeVisible();
-    await expect(page.getByText("80 lbs")).toBeVisible();
+    await expect(page.getByText("80 kg")).toBeVisible();
     await expect(page.getByText("10 reps")).toBeVisible();
   });
 
@@ -128,7 +128,7 @@ test.describe("View Exercise Detail", () => {
       page.getByRole("heading", { name: "Bench Press" })
     ).toBeVisible();
     await expect(page.getByText("Flat barbell bench press")).toBeVisible();
-    await expect(page.getByText("60 lbs")).toBeVisible();
+    await expect(page.getByText("60 kg")).toBeVisible();
     await expect(page.getByText("8")).toBeVisible();
   });
 
@@ -137,7 +137,7 @@ test.describe("View Exercise Detail", () => {
 
     await page.getByRole("link", { name: "Squat" }).click();
 
-    await expect(page.getByText("100 lbs")).toBeVisible();
+    await expect(page.getByText("100 kg")).toBeVisible();
     await expect(page.getByText("5")).toBeVisible();
   });
 
@@ -219,7 +219,7 @@ test.describe("Edit Exercise", () => {
     await page.getByRole("button", { name: "Save Changes" }).click();
 
     // Verify updated values on detail page
-    await expect(page.getByText("100 lbs")).toBeVisible();
+    await expect(page.getByText("100 kg")).toBeVisible();
     await expect(page.getByText("3")).toBeVisible();
   });
 
