@@ -1,333 +1,603 @@
-# Exercise Entity Refactoring - Implementation Plan
+# Supabase Backend Integration - Implementation Plan
 
 ## Overview
 
-Refactor exercises from inline plan data to standalone entities that can be reused across multiple workout plans. This enables an exercise library where users manage exercises independently, then compose plans by selecting from existing exercises.
+Move the app from a purely client-side, localStorage-backed store to a Supabase
+backend with real authentication, per-user data isolation via RLS, and a
+deployment script for schema changes.
+
+The app is currently 100% client components with no server code at all. The
+repository abstraction introduced in the previous refactor ([lib/repositories/types.ts](lib/repositories/types.ts))
+is already async and is the correct seam — Supabase implementations drop in
+behind the existing interfaces. The real work is the **read path**: the hooks
+([lib/hooks/use-plans.ts](lib/hooks/use-plans.ts), [lib/hooks/use-exercises.ts](lib/hooks/use-exercises.ts))
+bypass the repository entirely and read raw localStorage JSON through
+`useSyncExternalStore`. That cannot survive a network-backed store and must be
+rewritten.
 
 ### Key Decisions
-- **Reference model**: Plans store exercise IDs only; always fetch fresh exercise data (single source of truth)
-- **Migration**: Auto-migrate existing inline exercises to standalone entities on first load
-- **Deletion**: Cascade delete - removing an exercise removes it from all plans
-- **Creation**: Plan form dropdown includes "Create new exercise" modal option
-- **Data layer**: Repository pattern abstraction to enable easy backend swap later
 
-### Tech Stack
-- Zod schemas for validation
-- Repository pattern for data access (localStorage now, API later)
-- localStorage for persistence (separate keys for exercises vs plans)
-- React Hook Form for forms
-- shadcn/ui components (Dialog, Command/Combobox for dropdown)
+- **Auth**: email + password only. No OAuth, no magic links, no SMTP dependency.
+- **Data import**: an idempotent function that copies the signed-in user's
+  localStorage data into Supabase. Safe to re-run; never duplicates.
+- **E2E tests**: run against a local `supabase start` stack with a seeded test
+  user. Tests exercise the real auth flow and real RLS.
+- **Deployment**: no CI. A local `npm run db:deploy` script wrapping
+  `supabase db push`.
+- **Client-side Supabase, not server actions.** Every page in this app is a
+  client component. RLS is the authorization boundary. Introducing server
+  actions would mean rewriting every page for no security gain.
+- **Ordered plan exercises** are preserved via a `position` column on a join
+  table — the current `exerciseIds` array is order-sensitive and that order is
+  rendered.
+- **`removeExerciseFromAllPlans` is deleted** from the repository interface.
+  A database `on delete cascade` replaces the hand-rolled cascade.
+
+### Target Schema
+
+```sql
+exercises
+  id          uuid primary key default gen_random_uuid()
+  user_id     uuid not null references auth.users(id) on delete cascade
+  label       text not null check (length(trim(label)) > 0)
+  description text
+  weight      numeric
+  reps        integer
+  created_at  timestamptz not null default now()
+  updated_at  timestamptz not null default now()
+
+plans
+  id          uuid primary key default gen_random_uuid()
+  user_id     uuid not null references auth.users(id) on delete cascade
+  name        text not null check (length(trim(name)) > 0)
+  created_at  timestamptz not null default now()
+  updated_at  timestamptz not null default now()
+
+plan_exercises
+  plan_id     uuid not null references plans(id) on delete cascade
+  exercise_id uuid not null references exercises(id) on delete cascade
+  position    integer not null
+  primary key (plan_id, exercise_id)
+```
+
+Rationale for the join table over a `uuid[]` column on `plans`: the array form
+cannot express a foreign key, so deleting an exercise would silently leave
+dangling IDs — exactly the problem `removeExerciseFromAllPlans` exists to paper
+over today. The join table lets the database own that cascade.
+
+**Extensibility.** The near-future entities named in [.ai/goal.md](.ai/goal.md)
+(workout sessions, per-set logging, exercise categories) all attach as new
+tables referencing `plans`/`exercises` without altering these three. A future
+`workout_sessions (id, user_id, plan_id, started_at, completed_at)` plus
+`session_sets (session_id, exercise_id, set_index, weight, reps, done)` is
+purely additive.
+
+**RLS.** Every table is `user_id = (select auth.uid())` for all four operations
+(select, insert, update, delete).
+
+`plan_exercises` has no `user_id` of its own — it is a link row saying "plan X
+contains exercise Y at position N". Its policies derive ownership by looking up
+the parent plan with an `exists` subquery. The alternative, denormalising
+`user_id` onto the link row, stores the same fact twice and lets the two copies
+disagree; deriving it means there is only one place the answer lives.
+
+The subquery is not a per-row lookup: Postgres inlines RLS policies into the
+query and rewrites a foreign-key-correlated `exists` into a semi-join. Since
+every application query reaches `plan_exercises` *through* `plans` (the nested
+select in Phase 3), the policy filters a table already present in the join, and
+the composite primary key `(plan_id, exercise_id)` already indexes the join
+column.
+
+`auth.uid()` is wrapped as `(select auth.uid())` throughout. Bare `auth.uid()`
+can be re-evaluated per row in some plan shapes; the subquery form forces it
+into an InitPlan evaluated exactly once. This is Supabase's documented RLS
+performance recommendation and costs nothing to adopt up front.
 
 ### Key Files (Current)
-- [lib/types.ts](lib/types.ts) — Zod schemas and TypeScript types (StandaloneExercise, WorkoutPlan with exerciseIds)
-- [lib/repositories/](lib/repositories/) — Repository pattern abstraction layer
-  - [lib/repositories/types.ts](lib/repositories/types.ts) — Repository interfaces (PlanRepository, ExerciseRepository)
-  - [lib/repositories/provider.tsx](lib/repositories/provider.tsx) — React context for dependency injection
-  - [lib/repositories/local-storage/plan-repository.ts](lib/repositories/local-storage/plan-repository.ts) — localStorage plan implementation
-  - [lib/repositories/local-storage/exercise-repository.ts](lib/repositories/local-storage/exercise-repository.ts) — localStorage exercise implementation
-- [lib/hooks/use-plans.ts](lib/hooks/use-plans.ts) — React hooks for plan state (uses repository)
-- [lib/hooks/use-exercises.ts](lib/hooks/use-exercises.ts) — React hooks for exercise state (uses repository)
-- [components/nav-header.tsx](components/nav-header.tsx) — Top navigation header (Plans | Exercises)
-- [components/plan-form.tsx](components/plan-form.tsx) — Plan create/edit form (uses exercise selector dropdown)
-- [components/exercise-selector.tsx](components/exercise-selector.tsx) — Combobox dropdown for selecting exercises
-- [components/exercise-modal.tsx](components/exercise-modal.tsx) — Modal for quick inline exercise creation
-- [components/plan-list-table.tsx](components/plan-list-table.tsx) — Plan list table with actions
-- [components/exercise-form.tsx](components/exercise-form.tsx) — Exercise create/edit form
-- [components/exercise-list-table.tsx](components/exercise-list-table.tsx) — Exercise list table with actions
-- [components/exercise-table.tsx](components/exercise-table.tsx) — Read-only exercise display (uses StandaloneExercise)
-- [app/page.tsx](app/page.tsx) — Home page with plan list
-- [app/exercise/page.tsx](app/exercise/page.tsx) — Exercise list page
-- [app/exercise/create/page.tsx](app/exercise/create/page.tsx) — Create exercise page
-- [app/exercise/[id]/page.tsx](app/exercise/[id]/page.tsx) — Exercise detail page
-- [app/exercise/[id]/edit/page.tsx](app/exercise/[id]/edit/page.tsx) — Edit exercise page
-- [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) — Workout tracking page (session-only state)
+
+Data layer — the seam being replaced:
+- [lib/types.ts](lib/types.ts) — Zod schemas: `standaloneExerciseSchema`, `workoutPlanSchema`
+- [lib/repositories/types.ts](lib/repositories/types.ts) — `PlanRepository`, `ExerciseRepository` interfaces
+- [lib/repositories/provider.tsx](lib/repositories/provider.tsx) — React context, instantiates localStorage repos, wires the cascade
+- [lib/repositories/local-storage/plan-repository.ts](lib/repositories/local-storage/plan-repository.ts) — localStorage plans
+- [lib/repositories/local-storage/exercise-repository.ts](lib/repositories/local-storage/exercise-repository.ts) — localStorage exercises
+- [lib/repositories/index.ts](lib/repositories/index.ts) — barrel export
+- [lib/hooks/use-plans.ts](lib/hooks/use-plans.ts) — **reads localStorage directly**, bypassing the repository
+- [lib/hooks/use-exercises.ts](lib/hooks/use-exercises.ts) — same
+- [lib/hooks/index.ts](lib/hooks/index.ts) — barrel export
+- [lib/migrations.ts](lib/migrations.ts) — legacy inline-exercise → standalone localStorage migration
+
+Consuming pages (all `"use client"`):
+- [app/layout.tsx](app/layout.tsx) — wraps app in `RepositoryProvider`, renders `NavHeader`
+- [app/page.tsx](app/page.tsx) — plan list
+- [app/plan/create/page.tsx](app/plan/create/page.tsx) — create plan
+- [app/plan/[id]/page.tsx](app/plan/[id]/page.tsx) — plan detail, derives exercises via `useMemo`
+- [app/plan/[id]/edit/page.tsx](app/plan/[id]/edit/page.tsx) — edit plan
+- [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) — workout session, writes weight/reps back on finish
+- [app/exercise/page.tsx](app/exercise/page.tsx) — exercise list
+- [app/exercise/create/page.tsx](app/exercise/create/page.tsx) — create exercise
+- [app/exercise/[id]/page.tsx](app/exercise/[id]/page.tsx) — exercise detail, lists plans using it
+- [app/exercise/[id]/edit/page.tsx](app/exercise/[id]/edit/page.tsx) — edit exercise
+
+Components:
+- [components/nav-header.tsx](components/nav-header.tsx) — Plans | Exercises nav
+- [components/plan-form.tsx](components/plan-form.tsx), [components/plan-list-table.tsx](components/plan-list-table.tsx)
+- [components/exercise-form.tsx](components/exercise-form.tsx), [components/exercise-list-table.tsx](components/exercise-list-table.tsx), [components/exercise-table.tsx](components/exercise-table.tsx)
+- [components/exercise-selector.tsx](components/exercise-selector.tsx), [components/exercise-modal.tsx](components/exercise-modal.tsx)
+
+Tests (11 spec files, ~1370 lines):
+- [e2e/helpers.ts](e2e/helpers.ts) — `clearStorage`, `createExercise`, `createPlan`
+- [e2e/create-plan.spec.ts](e2e/create-plan.spec.ts), [e2e/edit-plan.spec.ts](e2e/edit-plan.spec.ts), [e2e/delete-plan.spec.ts](e2e/delete-plan.spec.ts), [e2e/view-plan.spec.ts](e2e/view-plan.spec.ts)
+- [e2e/exercise-crud.spec.ts](e2e/exercise-crud.spec.ts), [e2e/exercise-cascade.spec.ts](e2e/exercise-cascade.spec.ts), [e2e/exercise-edge-cases.spec.ts](e2e/exercise-edge-cases.spec.ts)
+- [e2e/workout.spec.ts](e2e/workout.spec.ts), [e2e/workout-propagation.spec.ts](e2e/workout-propagation.spec.ts)
+- [e2e/navigation.spec.ts](e2e/navigation.spec.ts)
+- [playwright.config.ts](playwright.config.ts) — starts `npm run dev`, single worker
+
+### Environment Status (verified)
+
+- Supabase CLI `v2.108.0`, authenticated. Two unrelated projects exist; **no
+  workout project yet** — one will be created in Phase 1.
+- Git remote: `git@github.com:bohdanKulcyckyj/workout-app.git`. No `.github/`.
+- Vercel CLI installed; no `.vercel/` link in this repo. The README claims a
+  live Vercel deploy, so the project exists remotely but is not linked locally.
+- No `.env*` files. `.gitignore` already ignores `.env*`.
+- Docker is required for `supabase start`. **Verify this first** — it gates
+  Phase 1 and all E2E work from Phase 4 onward.
 
 ---
 
-## Phase 0: Data Layer Abstraction (Repository Pattern)
+## Phase 1: Supabase Project, Schema & RLS
 
-- [x] Complete
+- [ ] Complete
 
 ### Goals
-Introduce a repository abstraction layer for data access. This decouples storage implementation from business logic, enabling easy swap from localStorage to a real backend API later.
+
+Stand up the Supabase project and the complete database schema with RLS. No
+application code changes in this phase — the app continues to work entirely on
+localStorage. This phase is verifiable purely at the database level.
 
 ### Steps
 
-1. **Define repository interfaces** ([lib/repositories/types.ts](lib/repositories/types.ts) - new file)
-   ```typescript
-   export interface PlanRepository {
-     getAll(): Promise<WorkoutPlan[]>;
-     getById(id: string): Promise<WorkoutPlan | null>;
-     save(plan: WorkoutPlan): Promise<void>;
-     delete(id: string): Promise<void>;
-   }
+1. **Verify Docker availability**
+   - `docker info` must succeed. `supabase start` cannot run without it.
+   - If unavailable, stop and report — Phase 1 verification and all later E2E
+     work depend on the local stack.
 
-   export interface ExerciseRepository {
-     getAll(): Promise<StandaloneExercise[]>;
-     getById(id: string): Promise<StandaloneExercise | null>;
-     getByIds(ids: string[]): Promise<StandaloneExercise[]>;
-     save(exercise: StandaloneExercise): Promise<void>;
-     delete(id: string): Promise<void>;
-   }
-   ```
+2. **Initialise Supabase in the repo**
+   - `supabase init` → creates `supabase/config.toml` and `supabase/migrations/`.
+   - Commit `supabase/` (config and migrations are source; the `.branches` and
+     `.temp` dirs that `supabase init` gitignores stay ignored).
 
-2. **Implement localStorage plan repository** ([lib/repositories/local-storage/plan-repository.ts](lib/repositories/local-storage/plan-repository.ts) - new file)
-   - Migrate existing logic from [lib/storage.ts](lib/storage.ts)
-   - Implement `PlanRepository` interface
-   - Keep same localStorage key `"workout-plans"`
+3. **Create the remote project**
+   - `supabase projects create workout-app --org-id wwlyjxuejwjzkygmgshp --region eu-central-1 --db-password <generated>`
+   - Record the project ref. Store the DB password in a password manager — it
+     is shown once.
+   - `supabase link --project-ref <ref>`
 
-3. **Create repository provider/context** ([lib/repositories/provider.tsx](lib/repositories/provider.tsx) - new file)
-   - React context to provide repository instances
-   - Default to localStorage implementations
-   - Easy to swap to API implementations later
-
-4. **Update React hooks to use repositories** ([lib/use-local-storage-plans.ts](lib/use-local-storage-plans.ts))
-   - Rename to [lib/hooks/use-plans.ts](lib/hooks/use-plans.ts)
-   - Use repository from context instead of direct localStorage access
-   - Keep same hook API (`usePlans`, `usePlan`)
-
-5. **Update all consuming components**
-   - Wrap app with repository provider
-   - Update imports from old hook location to new
-   - Ensure all pages still work with async repository methods
-
-6. **Remove old storage service** ([lib/storage.ts](lib/storage.ts))
-   - Delete after migration complete
-   - All access now goes through repository
-
-### Verification
-- [x] Repository interfaces defined with full CRUD operations
-- [x] localStorage implementation passes all existing functionality
-- [x] React hooks work with repository abstraction
-- [x] All existing pages/components still function correctly
-- [x] No direct localStorage access outside repository implementations
-
----
-
-## Phase 1: Exercise Entity & Storage Infrastructure
-
-- [x] Complete
-
-### Goals
-Create the standalone exercise entity, implement its repository, and add migration logic to convert existing inline exercises.
-
-### Steps
-
-1. **Update types** ([lib/types.ts](lib/types.ts))
-   - Create new `StandaloneExercise` schema:
-     ```typescript
-     export const standaloneExerciseSchema = z.object({
-       id: z.string(),
-       label: z.string().min(1),
-       description: z.string().optional(),
-       weight: z.number().optional(),
-       reps: z.number().optional(),
-     });
+4. **Write the schema migration** (`supabase/migrations/<ts>_init_schema.sql`)
+   - Create `exercises`, `plans`, `plan_exercises` exactly as specified in the
+     Overview.
+   - Index `exercises(user_id)`, `plans(user_id)`, `plan_exercises(exercise_id)`.
+     The `plan_exercises` primary key already covers `plan_id` lookups.
+   - Add an `updated_at` trigger function and attach it to `exercises` and
+     `plans`, so `updated_at` is maintained by the database rather than by each
+     client write:
+     ```sql
+     create function public.set_updated_at() returns trigger
+       language plpgsql as $$
+       begin new.updated_at = now(); return new; end $$;
      ```
-   - Update `WorkoutPlan` to reference exercise IDs instead of inline exercises:
-     ```typescript
-     export const workoutPlanSchema = z.object({
-       id: z.string(),
-       name: z.string(),
-       exerciseIds: z.array(z.string()), // Changed from exercises array
-       createdAt: z.string(),
-       updatedAt: z.string(),
-     });
+
+5. **Write the RLS migration** (`supabase/migrations/<ts>_rls.sql`)
+   - `alter table ... enable row level security` on all three tables.
+   - `exercises` and `plans`: one policy per operation,
+     `user_id = (select auth.uid())`. `with check` on insert/update as well as
+     `using` — without `with check`, a user could update a row to assign it to
+     someone else.
+   - `plan_exercises`: policies via
+     `exists (select 1 from plans p where p.id = plan_id and p.user_id = (select auth.uid()))`.
+     Guard the `exercise_id` side on insert too, so a user cannot attach another
+     user's exercise to their own plan.
+   - Use the `(select auth.uid())` form everywhere, never bare `auth.uid()` —
+     see the RLS note in the Overview.
+
+6. **Seed file for local development** (`supabase/seed.sql`)
+   - Insert a deterministic test user into `auth.users` with a known
+     email/password hash (`test@example.com` / `test-password-123`), plus its
+     `auth.identities` row. This user is what the E2E suite signs in as from
+     Phase 4.
+   - Keep the seed to the user only — no plans or exercises. Tests create their
+     own data and must start from a clean slate.
+
+7. **Apply and verify locally**
+   - `supabase start`, then `supabase db reset` to apply migrations + seed from
+     scratch.
+
+### Verification
+
+- [ ] `docker info` succeeds
+- [ ] `supabase start` brings the stack up; Studio reachable at `http://localhost:54323`
+- [ ] `supabase db reset` applies all migrations and the seed with no errors
+- [ ] All three tables exist with the specified columns and constraints
+- [ ] `select relrowsecurity from pg_class where relname in ('exercises','plans','plan_exercises')` returns `true` for all three
+- [ ] Deleting an `exercises` row cascades: its `plan_exercises` rows disappear
+- [ ] Deleting a `plans` row cascades: its `plan_exercises` rows disappear
+- [ ] RLS isolation proven with two users: create two users via the local auth
+      API, insert an exercise as user A, and confirm a query authenticated as
+      user B returns zero rows (not an error — RLS filters silently)
+- [ ] Updating a row bumps `updated_at` without the client sending it
+- [ ] `supabase db push` applies the same migrations to the remote project
+
+---
+
+## Phase 2: Authentication
+
+- [ ] Complete
+
+### Goals
+
+Add email + password auth with session handling, a login/signup page, route
+protection, and sign-out. Data still comes from localStorage at the end of this
+phase — auth and data are deliberately decoupled so each is verifiable alone.
+
+### Steps
+
+1. **Install dependencies**
+   - `npm install @supabase/supabase-js @supabase/ssr`
+   - `@supabase/ssr` is required for cookie-based sessions that Next.js
+     middleware can read and refresh. The plain `supabase-js` browser client
+     stores sessions in localStorage, which middleware cannot see.
+
+2. **Environment files**
+   - `.env.local` (gitignored) with `NEXT_PUBLIC_SUPABASE_URL` and
+     `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+   - Commit a `.env.example` documenting both names with placeholder values.
+     Note in it that local values come from `supabase status`.
+   - Both keys are `NEXT_PUBLIC_` by design — the anon key is meant to be
+     public, and RLS is what protects the data. **The service-role key must
+     never appear in this app.**
+
+3. **Supabase clients** (`lib/supabase/`)
+   - `client.ts` — `createBrowserClient` for client components.
+   - `server.ts` — `createServerClient` bound to `next/headers` cookies, for
+     middleware and any future server code.
+   - `middleware.ts` — the session-refresh helper `@supabase/ssr` requires.
+
+4. **Next.js middleware** ([middleware.ts](middleware.ts), repo root — new file)
+   - Refresh the auth session on every request.
+   - Redirect unauthenticated requests to `/login`, and authenticated requests
+     hitting `/login` to `/`.
+   - `matcher` must exclude `_next/static`, `_next/image`, and `favicon.ico`.
+
+5. **Auth context** (`lib/auth/provider.tsx` — new file)
+   - Expose `{ user, session, isLoading, signIn, signUp, signOut }`.
+   - Subscribe to `onAuthStateChange`; unsubscribe on unmount.
+   - Wrap the app in [app/layout.tsx](app/layout.tsx), **outside**
+     `RepositoryProvider` — Phase 3 makes the repositories depend on the user.
+
+6. **Login page** (`app/login/page.tsx` — new file)
+   - Single page toggling between sign-in and sign-up, matching the existing
+     form idiom: React Hook Form + `zodResolver` + shadcn `Input`/`Button`, as
+     in [components/exercise-form.tsx](components/exercise-form.tsx).
+   - Surface Supabase auth errors inline (`text-destructive`, consistent with
+     existing validation messages).
+   - This route renders outside the `NavHeader` shell.
+
+7. **Sign-out in the nav** ([components/nav-header.tsx](components/nav-header.tsx))
+   - Add the user's email and a sign-out button on the right of the existing
+     nav. On sign-out, redirect to `/login`.
+
+8. **Disable email confirmation for local development**
+   - Set `enable_confirmations = false` under `[auth.email]` in
+     `supabase/config.toml` so signup yields an immediately usable session
+     locally. Leave the remote project's default in place.
+
+### Verification
+
+- [ ] Visiting `/` while signed out redirects to `/login`
+- [ ] Sign-up with a new email creates a user visible in local Studio
+- [ ] Sign-in with correct credentials lands on `/` with the nav showing the email
+- [ ] Sign-in with wrong credentials shows an inline error and does not navigate
+- [ ] Session survives a hard page refresh (cookie-based, not localStorage)
+- [ ] Sign-out returns to `/login`; pressing Back does not restore the app
+- [ ] Visiting `/login` while signed in redirects to `/`
+- [ ] Every existing page still works when signed in (still localStorage-backed)
+- [ ] `npx tsc --noEmit` passes
+- [ ] Static assets still load — middleware `matcher` is not over-broad
+
+---
+
+## Phase 3: Supabase Repositories
+
+- [ ] Complete
+
+### Goals
+
+Implement the repository interfaces against Supabase and select the
+implementation based on auth state. Hooks are untouched in this phase, so the
+UI still reads localStorage — the new repositories are verified directly.
+
+### Steps
+
+1. **Row types and mappers** (`lib/supabase/mappers.ts` — new file)
+   - Snake_case DB rows ↔ camelCase domain types from [lib/types.ts](lib/types.ts).
+   - `exercises` maps cleanly. `plans` needs assembly: the domain `WorkoutPlan`
+     carries `exerciseIds: string[]`, built from `plan_exercises` ordered by
+     `position`.
+   - Postgres `numeric` arrives as a **string** over the wire. Coerce `weight`
+     with `Number(...)` in the mapper or the Zod parse will fail.
+
+2. **Supabase exercise repository** (`lib/repositories/supabase/exercise-repository.ts` — new file)
+   - Implements `ExerciseRepository`.
+   - `save` uses `upsert` — the interface has a single `save` for both create
+     and update, and the form already generates the id client-side via
+     `crypto.randomUUID()` ([components/exercise-form.tsx:58](components/exercise-form.tsx#L58)),
+     which is a valid Postgres `uuid`.
+   - `user_id` is set from the current session on insert.
+   - `delete` is a plain delete — the FK cascade handles `plan_exercises`.
+
+3. **Supabase plan repository** (`lib/repositories/supabase/plan-repository.ts` — new file)
+   - Implements `PlanRepository`.
+   - `getAll` selects plans with a nested `plan_exercises(exercise_id, position)`
+     and maps to ordered `exerciseIds`.
+   - `save` upserts the plan row, then reconciles `plan_exercises`: delete rows
+     no longer present, upsert the current set with their `position`. Ordering
+     changes must be persisted, not just membership.
+   - **Drop `removeExerciseFromAllPlans`** from
+     [lib/repositories/types.ts](lib/repositories/types.ts) and from
+     [lib/repositories/local-storage/exercise-repository.ts](lib/repositories/local-storage/exercise-repository.ts).
+     The localStorage exercise repo keeps its own cascade internally (it has no
+     database to do it), but it no longer needs the injected `PlanRepository`
+     for it — which also removes the circular-dependency wiring in
+     [lib/repositories/provider.tsx:38-40](lib/repositories/provider.tsx#L38-L40).
+
+4. **Provider selects implementation** ([lib/repositories/provider.tsx](lib/repositories/provider.tsx))
+   - When a user is signed in **and** Supabase env vars are present, provide
+     Supabase repositories; otherwise localStorage.
+   - Keep the existing prop overrides — they are the injection point for tests.
+   - Move `migrateLocalStorage()` out of the `useMemo` body. Running a
+     side-effecting migration inside `useMemo` is incorrect under StrictMode
+     double-invocation; it belongs in a `useEffect`.
+
+5. **Temporary verification harness**
+   - Since the hooks still read localStorage, add a throwaway dev-only page or
+     a script that exercises the Supabase repositories directly (create, read,
+     update, delete, reorder) against the local stack.
+   - Delete it at the end of the phase — its job is proving Phase 3 in
+     isolation, and Phase 4 supersedes it.
+
+### Verification
+
+- [ ] Every `ExerciseRepository` method works against the local stack
+- [ ] Every `PlanRepository` method works against the local stack
+- [ ] `plan.exerciseIds` order round-trips: save `[A,B,C]`, reload, get `[A,B,C]`
+- [ ] Reordering to `[C,A,B]` and reloading returns `[C,A,B]`
+- [ ] Deleting an exercise removes it from plans via the DB cascade, with no
+      application-level cascade code involved
+- [ ] `weight` returns as a `number`, not a string — Zod parse succeeds
+- [ ] Rows carry the correct `user_id`; a second user sees none of them
+- [ ] `removeExerciseFromAllPlans` no longer exists anywhere in the codebase
+- [ ] `npx tsc --noEmit` passes
+- [ ] With no Supabase env vars set, the app still runs fully on localStorage
+
+---
+
+## Phase 4: Async Hooks & E2E Against Supabase
+
+- [ ] Complete
+
+### Goals
+
+Rewrite the hooks to read through the repository asynchronously, making the UI
+genuinely Supabase-backed, and repoint the E2E suite at the local Supabase stack
+with a seeded test user. This is the phase where the app actually changes over.
+
+### Steps
+
+1. **Rewrite [lib/hooks/use-plans.ts](lib/hooks/use-plans.ts)**
+   - Replace `useSyncExternalStore` + `localStorage.getItem` with `useState` +
+     `useEffect` calling `repository.getAll()`.
+   - Keep the exported shape identical — `{ plans, isLoading, refresh, savePlan,
+     deletePlan }` and `usePlan(id)` returning `{ plan, isLoading, refresh,
+     savePlan }` — so consuming pages need no changes.
+   - `isLoading` becomes real. Pages already render a loading branch for it
+     (e.g. [app/page.tsx:16-22](app/page.tsx#L16-L22)), which until now was dead
+     code because the value was hardcoded `false`.
+   - `refresh` re-fetches instead of dispatching a window event.
+   - Preserve the existing alphabetical sort. Prefer `order("name")` in the
+     query over sorting client-side.
+   - Guard against out-of-order responses: ignore a resolved fetch if a newer
+     one has started or the component unmounted.
+
+2. **Rewrite [lib/hooks/use-exercises.ts](lib/hooks/use-exercises.ts)**
+   - Same treatment. Keep `getExercisesByIds` — it is already repository-backed.
+
+3. **Handle the `null` plan race**
+   - Pages currently treat "plan not found" as `!plan` and render a Not Found
+     state ([app/plan/[id]/page.tsx:37](app/plan/[id]/page.tsx#L37)). With async
+     loading, `plan` is `null` *during* the fetch too. The `isLoading` branch
+     must be checked before the `!plan` branch on every detail page, otherwise
+     a Not Found flashes on each load.
+   - Affects the plan detail, plan edit, exercise detail, exercise edit, and
+     workout pages.
+
+4. **Verify the workout page still derives correctly** ([app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx))
+   - The `useMemo` deriving `initialWorkoutExercises` from `plan.exerciseIds` +
+     `allExercises` ([lines 59-71](app/plan/[id]/workout/page.tsx#L59-L71)) now
+     runs against async data. The `exercisesLoaded` latch
+     ([lines 81-86](app/plan/[id]/workout/page.tsx#L81-L86)) already guards
+     against re-initialising the form; confirm it still holds when both hooks
+     resolve at different times.
+   - The previous refactor hit an infinite re-render loop here. Re-verify
+     explicitly.
+
+5. **Add error surfacing**
+   - Network and RLS failures are now possible where localStorage could not
+     fail. Add an `error` field to both hooks and render a minimal inline
+     message. Do not let a failed write pass silently — the user would believe
+     data was saved.
+
+6. **Rework [e2e/helpers.ts](e2e/helpers.ts)**
+   - Replace `clearStorage` with `resetAndLogin(page)`:
+     truncate the test user's rows (via a `service_role` client from the local
+     stack, in Node — never in app code), then sign in through the UI at
+     `/login` as the seeded user.
+   - `createExercise` and `createPlan` keep their signatures and bodies; they
+     drive the UI and are agnostic to the backend.
+   - Add `await`s for network settling where the old localStorage writes were
+     synchronous. Prefer Playwright's auto-waiting assertions over fixed sleeps.
+
+7. **Update all 11 spec files**
+   - Swap `clearStorage` → `resetAndLogin` in each `beforeEach`. Spec bodies
+     stay as they are.
+   - [e2e/exercise-cascade.spec.ts](e2e/exercise-cascade.spec.ts) is the
+     important one: it now proves the *database* cascade rather than the
+     application one.
+
+8. **Update [playwright.config.ts](playwright.config.ts)**
+   - Keep `workers: 1`. Tests share one seeded user and truncate between tests,
+     so they cannot run in parallel.
+   - Point the dev server at the local Supabase env.
+   - Raise `webServer.timeout` — the stack plus Next.js dev start is slower than
+     30s cold.
+
+### Verification
+
+- [ ] `supabase start` running, then all 11 spec files pass against it
+- [ ] Data created in a test is visible in local Studio under the test user
+- [ ] Signing out and back in shows the same data — it is genuinely server-side
+- [ ] Opening the app in a second browser profile as a different user shows an
+      empty state, not the first user's data
+- [ ] Loading states appear during fetches; no Not Found flash on detail pages
+- [ ] Workout page loads, checkboxes work, confetti fires on completion
+- [ ] Weight/reps edits during a workout persist to Supabase on finish
+      ([app/plan/[id]/workout/page.tsx:133-148](app/plan/[id]/workout/page.tsx#L133-L148))
+- [ ] Deleting an exercise removes it from plans that use it
+- [ ] No infinite re-render loops — check the console on every page
+- [ ] A forced failure (stop Supabase mid-session) surfaces an error rather than
+      silently appearing to succeed
+- [ ] `npx tsc --noEmit` passes; `npm run lint` clean
+
+---
+
+## Phase 5: Data Import & Deployment Script
+
+- [ ] Complete
+
+### Goals
+
+Give existing users a way to bring their localStorage data into their Supabase
+account, and add the deployment script for schema changes. This closes out the
+migration path and the tooling.
+
+### Steps
+
+1. **Import function** (`lib/import-local-data.ts` — new file)
+   - Signature: `importLocalData(exerciseRepo, planRepo): Promise<ImportResult>`
+     where `ImportResult` reports counts of imported and skipped records.
+   - **Run [lib/migrations.ts](lib/migrations.ts) `migrateLocalStorage()` first.**
+     A browser holding pre-refactor data still has inline `exercises` arrays on
+     its plans; reading it directly would import nothing useful. Chaining the
+     existing migration normalises the shape before import.
+   - Read from localStorage directly (not via the repositories — those now point
+     at Supabase).
+   - **Idempotency**, which is the explicit requirement here:
+     - Exercises and plans carry client-generated UUIDs already, so `upsert` on
+       the primary key is naturally idempotent — re-running overwrites the same
+       rows rather than duplicating.
+     - `plan_exercises` is upserted on its composite key `(plan_id,
+       exercise_id)`, and rows absent from the local data are deleted, so a
+       re-run converges rather than accumulating.
+     - Legacy IDs that are **not** valid UUIDs must be remapped. Data created
+       before the standalone-exercise refactor used `crypto.randomUUID()`, so
+       this is unlikely — but a non-UUID id would be rejected by Postgres, so
+       validate and remap deterministically rather than crashing mid-import.
+     - Write an `import-completed-<userId>` marker to localStorage so the prompt
+       stops appearing. The marker is a UX affordance only — correctness must
+       come from the upserts, so that clearing the marker and re-running is
+       still safe.
+   - Import order matters: exercises first, then plans, then `plan_exercises` —
+     the foreign keys require it.
+
+2. **Import UI**
+   - After sign-in, if localStorage holds plans or exercises and no marker
+     exists for this user, show a dismissible prompt offering the import.
+   - Report the outcome ("Imported 12 exercises and 3 plans"). On failure,
+     report it and leave localStorage untouched — it is the only copy.
+   - Do **not** clear localStorage after a successful import. Keep it as a
+     fallback; the marker suppresses the prompt.
+
+3. **Test the import**
+   - Add `e2e/import.spec.ts`: seed localStorage with known data before sign-in,
+     sign in, run the import, assert the data appears.
+   - **Assert idempotency explicitly**: clear the marker, run the import a
+     second time, and assert counts are unchanged. This is the requirement, so
+     it needs a test rather than an argument.
+   - Add a case seeding *legacy-format* localStorage (inline `exercises` arrays)
+     to prove the `migrateLocalStorage()` chaining works.
+
+4. **Deployment script**
+   - Add to [package.json](package.json):
+     ```json
+     "db:deploy": "supabase db push",
+     "db:diff":   "supabase db diff -f",
+     "db:reset":  "supabase db reset"
      ```
-   - Keep old `exerciseSchema` temporarily for workout tracking (has `done` flag)
+   - `db:deploy` pushes local migrations to the linked remote project.
+   - Confirm `supabase link` is in place before running; the script fails
+     clearly if not.
 
-2. **Implement localStorage exercise repository** ([lib/repositories/local-storage/exercise-repository.ts](lib/repositories/local-storage/exercise-repository.ts) - new file)
-   - Implement `ExerciseRepository` interface from Phase 0
-   - Storage key: `"exercises"`
-   - On `delete`: Also remove exercise ID from all plans (cascade) via plan repository
+5. **Remote environment**
+   - Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` on the
+     Vercel project (the README references an existing deployment at
+     `workout-app-wine-psi.vercel.app`).
+   - Verify the production auth redirect URLs in the Supabase dashboard include
+     the Vercel domain, or sign-in will fail in production.
 
-3. **Create exercise React hooks** ([lib/hooks/use-exercises.ts](lib/hooks/use-exercises.ts) - new file)
-   - `useExercises()` — returns all exercises with loading/refresh
-   - `useExercise(id)` — returns single exercise
-   - Uses exercise repository from context
-
-4. **Update repository provider** ([lib/repositories/provider.tsx](lib/repositories/provider.tsx))
-   - Add exercise repository to context
-   - Provide localStorage implementation by default
-
-5. **Implement migration logic** ([lib/migration.ts](lib/migration.ts) - new file)
-   - `migrateInlineExercises()` function:
-     - Read all plans via plan repository
-     - For each plan with inline `exercises` array (old format):
-       - Extract each exercise, generate `StandaloneExercise` (use existing id, map `name`→`label`)
-       - Deduplicate by label (same name = same exercise)
-       - Save to exercise repository
-       - Update plan to use `exerciseIds` array
-       - Save updated plan via plan repository
-     - Mark migration complete with `localStorage.setItem("migration-v1", "done")`
-   - Run migration on app startup (check flag first)
-
-6. **Update plan repository** ([lib/repositories/local-storage/plan-repository.ts](lib/repositories/local-storage/plan-repository.ts))
-   - Handle both old (inline exercises) and new (exerciseIds) schema during migration period
-   - After migration, work with new schema only
+6. **Documentation** ([README.md](README.md))
+   - Update the Tech Stack table: storage is Supabase, not localStorage.
+   - Update the now-stale Project Structure block — it still lists
+     `lib/storage.ts` and `lib/use-local-storage-plans.ts`, neither of which
+     exists.
+   - Add setup steps: `supabase start`, `.env.local`, `npm run db:reset`.
+   - Document `db:deploy` and the schema.
 
 ### Verification
-- [x] Exercise repository works independently (can save/load exercises)
-- [x] Migration converts existing plans correctly
-- [x] Plans now store `exerciseIds` instead of inline exercises
-- [x] Deleting an exercise removes its ID from all plans (cascade)
-- [x] App still loads without errors after migration
+
+- [ ] Import with legacy inline-exercise localStorage brings data across intact
+- [ ] Import with current-format localStorage brings data across intact
+- [ ] Plan → exercise associations and their order survive the import
+- [ ] **Running the import twice produces no duplicates and no changed counts**
+- [ ] Clearing the marker and re-importing is still safe
+- [ ] Import of an empty localStorage is a no-op, not an error
+- [ ] A failed import leaves localStorage intact and reports the failure
+- [ ] The prompt does not reappear after a successful import
+- [ ] A second user importing their own data does not touch the first user's
+- [ ] `npm run db:deploy` applies pending migrations to the remote project
+- [ ] `npm run db:reset` rebuilds the local database from migrations + seed
+- [ ] Production deploy: sign-up, sign-in, and CRUD all work against the remote
+      project
+- [ ] All E2E specs pass, including the new import spec
+- [ ] README no longer references deleted files
 
 ---
 
-## Phase 2: Exercise Management Pages
+## Risks & Notes
 
-- [x] Complete
-
-### Goals
-Create the exercise list and detail pages for managing standalone exercises.
-
-### Steps
-
-1. **Create exercise list page** ([app/exercise/page.tsx](app/exercise/page.tsx))
-   - Similar layout to plan list ([app/page.tsx](app/page.tsx))
-   - Show all exercises in a table/list with: label, description (truncated), weight, reps
-   - "Create Exercise" button linking to detail page in create mode
-   - Each row: click to view details, dropdown menu with Edit/Delete actions
-   - Delete action: confirmation dialog, then cascade delete
-   - Empty state when no exercises exist
-
-2. **Create exercise list component** ([components/exercise-list-table.tsx](components/exercise-list-table.tsx))
-   - Reusable table component similar to [components/plan-list-table.tsx](components/plan-list-table.tsx)
-   - Columns: Label, Description, Weight, Reps, Actions
-   - Actions dropdown: Edit, Delete
-
-3. **Create exercise detail page** ([app/exercise/[id]/page.tsx](app/exercise/[id]/page.tsx))
-   - View mode: Display all exercise fields, "Edit" button, "Delete" button, back navigation
-   - Show which plans use this exercise (query via plan repository)
-
-4. **Create exercise form component** ([components/exercise-form.tsx](components/exercise-form.tsx))
-   - Fields: label (required), description (optional textarea), weight (optional number), reps (optional number)
-   - Used for both create and edit
-   - Validation with Zod schema
-
-5. **Create exercise create page** ([app/exercise/create/page.tsx](app/exercise/create/page.tsx))
-   - Uses exercise form component
-   - On save: create exercise, redirect to exercise list
-
-6. **Create exercise edit page** ([app/exercise/[id]/edit/page.tsx](app/exercise/[id]/edit/page.tsx))
-   - Uses exercise form component with initial data
-   - On save: update exercise, redirect to exercise detail
-
-7. **Add navigation** ([components/nav-header.tsx](components/nav-header.tsx))
-   - Created top nav header with Plans | Exercises links
-   - Added to layout.tsx to appear on all pages
-
-### Verification
-- [x] Can navigate to exercise list page
-- [x] Can create a new exercise with all fields
-- [x] Can view exercise details
-- [x] Can edit an existing exercise
-- [x] Can delete an exercise (with confirmation)
-- [x] Deleting exercise removes it from plans that use it
-- [x] Exercise detail shows which plans reference it
-
----
-
-## Phase 3: Plan Form Refactoring
-
-- [x] Complete
-
-### Goals
-Replace the inline exercise creation in plan form with a dropdown selector and "Create new" modal.
-
-### Steps
-
-1. **Create exercise selector component** ([components/exercise-selector.tsx](components/exercise-selector.tsx) - new file)
-   - Combobox/Command dropdown (shadcn) listing all available exercises
-   - Shows exercise label, optionally weight/reps as hint
-   - "Create new exercise" option at bottom of list
-   - Fires `onSelect(exerciseId)` callback
-   - Filters exercises already added to current plan
-
-2. **Create exercise modal** ([components/exercise-modal.tsx](components/exercise-modal.tsx) - new file)
-   - Dialog containing the exercise form
-   - Used for quick inline creation from plan form
-   - On save: creates exercise, returns new exercise ID to parent
-   - Can reuse [components/exercise-form.tsx](components/exercise-form.tsx)
-
-3. **Refactor plan form** ([components/plan-form.tsx](components/plan-form.tsx))
-   - Remove inline exercise rows (name, weight, reps inputs per row)
-   - Replace with:
-     - List of selected exercises (read-only display with remove button)
-     - Exercise selector dropdown to add exercises
-   - Form now manages `exerciseIds: string[]` instead of `exercises: Exercise[]`
-   - When saving, pass `exerciseIds` to storage
-
-4. **Update plan display components**
-   - [components/exercise-table.tsx](components/exercise-table.tsx): Fetch exercises by IDs to display
-   - [app/plan/[id]/page.tsx](app/plan/[id]/page.tsx): Load exercises from IDs for display
-
-5. **Update plan create/edit pages**
-   - [app/plan/create/page.tsx](app/plan/create/page.tsx): Works with new form structure
-   - [app/plan/[id]/edit/page.tsx](app/plan/[id]/edit/page.tsx): Load plan's exercises by ID for initial form state
-
-6. **Update workout page** ([app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx))
-   - Derive exercises from plan's exerciseIds and the exercise store via `useMemo`
-   - Workout state tracks `done` status per exercise (session-only)
-   - On workout end, state is discarded
-
-7. **Update E2E tests** ([e2e/](e2e/))
-   - Updated create-plan tests for new dropdown flow
-   - Updated edit-plan tests for exercise selection
-   - Updated workout tests for new data flow
-   - Added test helper `createExercise` for exercise CRUD via UI
-   - Added test helper `createPlan` for plan creation via dropdown selector
-
-### Bug Fix: Infinite re-render loop in plan detail and workout pages
-
-Both [app/plan/[id]/page.tsx](app/plan/[id]/page.tsx) and [app/plan/[id]/workout/page.tsx](app/plan/[id]/workout/page.tsx) initially used `useEffect` + `getExercisesByIds(plan.exerciseIds)` to load exercises. This caused an infinite loop because `plan.exerciseIds` is an array — `useSyncExternalStore` re-parses JSON from localStorage on each subscription event, producing a new array reference every time. React sees it as a changed `useEffect` dependency, re-fires the effect, which triggers state updates, which re-renders, and the loop repeats, freezing the browser.
-
-**Fix**: Replaced async `useEffect` + `getExercisesByIds` with synchronous `useMemo` derivation from `allExercises` (already available via `useSyncExternalStore`). This eliminates the effect-based loop since `useMemo` doesn't trigger side effects.
-
-### Verification
-- [x] Plan form shows dropdown instead of inline exercise inputs
-- [x] Can select existing exercises from dropdown
-- [x] Can create new exercise via modal from dropdown
-- [x] Selected exercises display in plan form with remove option
-- [x] Saving plan stores only exercise IDs
-- [x] Plan detail page correctly displays exercises fetched by ID
-- [x] Edit plan page loads existing exercises correctly
-- [x] Workout page loads exercises from standalone storage
-- [x] Can check off exercises during workout
-- [x] Can modify weight/reps during workout (session-only)
-- [x] Completing workout works correctly
-- [x] All 24 E2E tests pass
-- [x] No infinite re-render loops
-
----
-
-## Phase 4: Cleanup & Final Testing
-
-- [x] Complete
-
-### Goals
-Clean up deprecated code and run final migration testing. Workout page updates and E2E tests were completed in Phase 3.
-
-### Steps
-
-1. **Clean up old code**
-   - Removed `legacyExerciseSchema`, `legacyWorkoutPlanSchema`, and all associated types (`LegacyExercise`, `LegacyWorkoutPlan`)
-   - Removed `flexibleWorkoutPlanSchema`, `FlexibleWorkoutPlan` type, and `workoutPlansSchema` (replaced with strict `z.array(workoutPlanSchema)`)
-   - Removed `getAllFlexible()` from `PlanRepository` interface and `LocalStoragePlanRepository`
-   - Simplified `LocalStoragePlanRepository` to work directly with `WorkoutPlan` (no flexible/migration-aware conversion)
-   - Removed `toWorkoutPlans()` conversion function from `use-plans.ts` hook
-   - Deleted `lib/migration.ts` (migration logic) and `components/migration-runner.tsx`
-   - Removed `MigrationRunner` wrapper from `app/layout.tsx`
-
-2. **Final testing**
-   - TypeScript compiles with zero errors (`tsc --noEmit`)
-   - All 24 E2E tests pass
-   - Fresh install verified via Playwright: empty states display correctly, can create exercises and plans
-   - Workout flow verified: exercise data loads from standalone storage, check-off works correctly
-
-### Verification
-- [x] No unused legacy types or schemas remain
-- [x] No console errors or type errors
-- [x] Fresh installs work without issues
-- [x] All 24 E2E tests pass
+- **Docker is a hard dependency** for the local stack and therefore for E2E from
+  Phase 4 on. Verify at the start of Phase 1, not at Phase 4.
+- **`numeric` → string.** Postgres returns `numeric` as a string. Missing this
+  in the mapper produces Zod parse failures that look like data corruption.
+  Alternatively, type `weight` as `real` — but `numeric` is the correct choice
+  for the 0.5kg increments the form uses ([components/exercise-form.tsx:105](components/exercise-form.tsx#L105)).
+- **RLS returns empty, not errors.** A misconfigured policy looks like "no data"
+  rather than "permission denied", which reads as a bug in the app. The
+  two-user isolation check in Phase 1 is what distinguishes them.
+- **Single shared test user** forces `workers: 1`. If the suite becomes slow,
+  the fix is a user per worker, not parallel workers on one user.
+- **The anon key is public by design.** RLS is the security boundary. The
+  service-role key belongs only in the E2E reset helper, which runs in Node
+  against the local stack — never in application code, and never in a
+  `NEXT_PUBLIC_` variable.
+- **`.env*` is already gitignored**, so `.env.local` will not be committed. The
+  committed `.env.example` must contain placeholders only.
