@@ -264,7 +264,7 @@ attach another user's exercise to its own plan. All three are rejected by RLS.
 
 ## Phase 2: Authentication
 
-- [ ] Complete
+- [x] Complete
 
 ### Goals
 
@@ -295,7 +295,8 @@ phase — auth and data are deliberately decoupled so each is verifiable alone.
      middleware and any future server code.
    - `middleware.ts` — the session-refresh helper `@supabase/ssr` requires.
 
-4. **Next.js middleware** ([middleware.ts](middleware.ts), repo root — new file)
+4. **Next.js middleware** ([proxy.ts](proxy.ts), repo root — new file; Next 16
+   renamed this convention from `middleware.ts`, see Deviations)
    - Refresh the auth session on every request.
    - Redirect unauthenticated requests to `/login`, and authenticated requests
      hitting `/login` to `/`.
@@ -326,16 +327,53 @@ phase — auth and data are deliberately decoupled so each is verifiable alone.
 
 ### Verification
 
-- [ ] Visiting `/` while signed out redirects to `/login`
-- [ ] Sign-up with a new email creates a user visible in local Studio
-- [ ] Sign-in with correct credentials lands on `/` with the nav showing the email
-- [ ] Sign-in with wrong credentials shows an inline error and does not navigate
-- [ ] Session survives a hard page refresh (cookie-based, not localStorage)
-- [ ] Sign-out returns to `/login`; pressing Back does not restore the app
-- [ ] Visiting `/login` while signed in redirects to `/`
-- [ ] Every existing page still works when signed in (still localStorage-backed)
-- [ ] `npx tsc --noEmit` passes
-- [ ] Static assets still load — middleware `matcher` is not over-broad
+- [x] Visiting `/` while signed out redirects to `/login` (307 → `/login`; also
+      verified for `/exercise`)
+- [x] Sign-up with a new email creates a user — `newuser@example.com` appeared
+      in `auth.users`, already confirmed, with an immediately usable session
+- [x] Sign-in with correct credentials lands on `/` with the nav showing the email
+- [x] Sign-in with wrong credentials shows an inline error ("Invalid login
+      credentials") and does not navigate
+- [x] Session survives a hard page refresh — and it is genuinely cookie-based:
+      `sb-127-auth-token` is present in `document.cookie`, and no `auth-token`
+      key exists in localStorage
+- [x] Sign-out returns to `/login`; pressing Back lands back on `/login` — the
+      client router starts restoring the old route, then the proxy redirect wins
+- [x] Visiting `/login` while signed in redirects to `/`
+- [x] Every existing page still works when signed in (still localStorage-backed)
+      — created an exercise and a plan, plan detail renders its exercise row
+- [x] `npx tsc --noEmit` passes
+- [x] Static assets still load — a real emitted chunk returns 200 with zero
+      redirects, and `/favicon.ico` returns 200. The `matcher` is not over-broad.
+
+Console was clean throughout: the only error logged across the whole session was
+the expected 400 from the deliberate wrong-password attempt.
+
+### Deviations from plan
+
+- **`middleware.ts` → `proxy.ts`.** Next 16.1 deprecates the `middleware` file
+  convention and warns on every dev start. The file is [proxy.ts](proxy.ts)
+  exporting `proxy()`; the `@supabase/ssr` session helper it calls is unchanged
+  at [lib/supabase/middleware.ts](lib/supabase/middleware.ts), since that is the
+  name the Supabase docs use. Redirects were re-verified after the rename.
+- **Both redirects live in the session helper**, not in separate route guards.
+  `updateSession` already has to call `getUser()` to refresh the session, so
+  deciding both redirects there reuses that single call rather than adding a
+  second auth lookup.
+- **`NavHeader` hides itself on `/login`** rather than the login route being
+  moved into its own route group. Same rendered result, one line, no layout
+  restructuring — and Phase 3+ pages keep the shell they already have.
+- **Env files already existed.** `.env.local` and `.env.example` were written in
+  Phase 1, so step 2 was already satisfied; nothing was changed.
+- **`enable_confirmations` was already `false`** in
+  [supabase/config.toml](supabase/config.toml) — the CLI's default for local.
+  Step 8 needed no edit, and sign-up was confirmed to yield an immediate session.
+- **Server client `setAll` swallows its throw.** Cookies are read-only in Server
+  Components; the proxy is what actually refreshes the session, so the failure
+  there is expected rather than an error to surface.
+- **Test data cleaned up.** The sign-up test user was deleted afterwards, so
+  `auth.users` is back to the Phase 1 seed (`test@example.com`,
+  `other@example.com`).
 
 ---
 
