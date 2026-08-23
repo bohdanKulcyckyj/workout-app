@@ -1,12 +1,27 @@
 "use client";
 
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  type ReactNode,
+} from "react";
 import type { PlanRepository, ExerciseRepository } from "./types";
 import {
   LocalStoragePlanRepository,
   LocalStorageExerciseRepository,
 } from "./local-storage";
+import { SupabasePlanRepository } from "./supabase/plan-repository";
+import { SupabaseExerciseRepository } from "./supabase/exercise-repository";
+import { createClient } from "../supabase/client";
+import { useAuth } from "../auth/provider";
 import { migrateLocalStorage } from "../migrations";
+
+const hasSupabaseEnv = Boolean(
+  process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 interface RepositoryContextValue {
   planRepository: PlanRepository;
@@ -26,24 +41,31 @@ export function RepositoryProvider({
   planRepository,
   exerciseRepository,
 }: RepositoryProviderProps) {
-  const value = useMemo(() => {
-    // Migrate legacy data before creating repositories
+  const { user } = useAuth();
+  const userId = hasSupabaseEnv ? (user?.id ?? null) : null;
+
+  useEffect(() => {
+    // Side effect, so not in the useMemo below -- StrictMode double-invokes it
     migrateLocalStorage();
+  }, []);
 
-    const planRepo = planRepository ?? new LocalStoragePlanRepository();
-    const exerciseRepo =
-      exerciseRepository ?? new LocalStorageExerciseRepository();
-
-    // Wire up circular dependency for cascade delete
-    if (exerciseRepo instanceof LocalStorageExerciseRepository) {
-      exerciseRepo.setPlanRepository(planRepo);
-    }
+  const value = useMemo(() => {
+    // Signed in with Supabase configured -> server-backed; otherwise localStorage
+    const supabase = userId ? createClient() : null;
 
     return {
-      planRepository: planRepo,
-      exerciseRepository: exerciseRepo,
+      planRepository:
+        planRepository ??
+        (supabase && userId
+          ? new SupabasePlanRepository(supabase, userId)
+          : new LocalStoragePlanRepository()),
+      exerciseRepository:
+        exerciseRepository ??
+        (supabase && userId
+          ? new SupabaseExerciseRepository(supabase, userId)
+          : new LocalStorageExerciseRepository()),
     };
-  }, [planRepository, exerciseRepository]);
+  }, [planRepository, exerciseRepository, userId]);
 
   return (
     <RepositoryContext.Provider value={value}>

@@ -5,7 +5,6 @@ export interface PlanRepository {
   getById(id: string): Promise<WorkoutPlan | null>;
   save(plan: WorkoutPlan): Promise<void>;
   delete(id: string): Promise<void>;
-  removeExerciseFromAllPlans(exerciseId: string): Promise<void>;
 }
 
 export interface ExerciseRepository {

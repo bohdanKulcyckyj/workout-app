@@ -34,21 +34,4 @@ export class LocalStoragePlanRepository implements PlanRepository {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(plans));
     window.dispatchEvent(new Event("plans-updated"));
   }
-
-  async removeExerciseFromAllPlans(exerciseId: string): Promise<void> {
-    const plans = await this.getAll();
-    let updated = false;
-
-    for (const plan of plans) {
-      if (plan.exerciseIds.includes(exerciseId)) {
-        plan.exerciseIds = plan.exerciseIds.filter((id) => id !== exerciseId);
-        updated = true;
-      }
-    }
-
-    if (updated) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(plans));
-      window.dispatchEvent(new Event("plans-updated"));
-    }
-  }
 }

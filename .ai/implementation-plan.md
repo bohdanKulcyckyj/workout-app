@@ -379,7 +379,7 @@ the expected 400 from the deliberate wrong-password attempt.
 
 ## Phase 3: Supabase Repositories
 
-- [ ] Complete
+- [x] Complete
 
 ### Goals
 
@@ -438,17 +438,96 @@ UI still reads localStorage — the new repositories are verified directly.
 
 ### Verification
 
-- [ ] Every `ExerciseRepository` method works against the local stack
-- [ ] Every `PlanRepository` method works against the local stack
-- [ ] `plan.exerciseIds` order round-trips: save `[A,B,C]`, reload, get `[A,B,C]`
-- [ ] Reordering to `[C,A,B]` and reloading returns `[C,A,B]`
-- [ ] Deleting an exercise removes it from plans via the DB cascade, with no
-      application-level cascade code involved
-- [ ] `weight` returns as a `number`, not a string — Zod parse succeeds
-- [ ] Rows carry the correct `user_id`; a second user sees none of them
-- [ ] `removeExerciseFromAllPlans` no longer exists anywhere in the codebase
-- [ ] `npx tsc --noEmit` passes
-- [ ] With no Supabase env vars set, the app still runs fully on localStorage
+- [x] Every `ExerciseRepository` method works against the local stack — all five
+      exercised as `test@example.com`: `getAll` returned the three seeded rows
+      sorted by label, `getById` hit and miss (miss → `null`), `getByIds`
+      preserved the argument order `[C,A]` and returned `[]` for `[]`, `save`
+      created then updated in place (label and weight changed, count stayed 3 —
+      the upsert does not duplicate), `delete` removed the row
+- [x] Every `PlanRepository` method works against the local stack — `getAll`
+      returned `Alpha Plan[1]`, `Zed Plan[3]` sorted by name, `getById` hit and
+      miss, `save` covered create / reorder / membership-drop / empty-set, and
+      `delete` removed the plan and cascaded its links to 0
+- [x] `plan.exerciseIds` order round-trips: saved `[A,B,C]`, reloaded, got
+      `[A,B,C]` back — and the reload survived `workoutPlanSchema.parse()`
+- [x] Reordering to `[C,A,B]` and reloading returns `[C,A,B]` — the upsert
+      rewrites `position` on the existing composite-key rows; positions swap
+      cleanly because nothing uniquely constrains `(plan_id, position)`
+- [x] Deleting an exercise removes it from plans via the DB cascade, with no
+      application-level cascade code involved — deleting B took `Zed Plan` from
+      `[A,B,C]` to `[A,C]` and `Alpha Plan` from `[B]` to `[]`. The Supabase
+      exercise repo's `delete` is a bare `delete().eq("id", id)`; nothing in it
+      touches `plan_exercises`
+- [x] `weight` returns as a `number`, not a string — `typeof weight === "number"`
+      and `standaloneExerciseSchema.parse()` succeeded. See Deviations: PostgREST
+      already emits `numeric` as a JSON number here, so the `Number(...)` coercion
+      is defensive rather than load-bearing
+- [x] Rows carry the correct `user_id`; a second user sees none of them — every
+      row's `user_id` equalled the signed-in id, and `other@example.com` read
+      0 exercises / 0 plans, with `getById` on a known id returning `null`
+      (filtered silently, not an error). A stranger `delete` on another user's
+      exercise was also a no-op — the row survived
+- [x] `removeExerciseFromAllPlans` no longer exists anywhere in the codebase —
+      `grep -rn "removeExerciseFromAllPlans\|setPlanRepository"` over all
+      `.ts`/`.tsx` outside `node_modules` returns nothing
+- [x] `npx tsc --noEmit` passes — clean. `npx eslint` is unchanged from the
+      pre-Phase-3 baseline (11 problems / 6 errors / 5 warnings, all
+      pre-existing); no new lint errors were introduced
+- [x] With no Supabase env vars set, the app still runs fully on localStorage —
+      with both `.env` and `.env.local` moved aside, `/` and `/exercise` return
+      200 with **zero** redirects (no `/login` wall), the plans UI renders the
+      real empty state, and the browser console is clean: 0 errors, 0 warnings.
+      This needed three guards that Phase 2 had not added — see Deviations
+
+### Deviations from plan
+
+- **`numeric` does not arrive as a string.** The plan's central warning (also in
+  Risks & Notes) does not hold for this stack: PostgREST serialises `numeric` as
+  a JSON number. Verified at the raw HTTP layer, bypassing `supabase-js`
+  entirely — `GET /rest/v1/exercises?select=weight` returns
+  `[{"label":"wire test","weight":62.5,"reps":null}]`, an unquoted number. The
+  `Number(...)` coercion is kept anyway: it costs one call, it is correct either
+  way, and the serialiser's behaviour is not something the app should depend on.
+  The mapper comment says exactly this rather than repeating the plan's claim.
+- **Three guards were needed for the no-env-vars fallback, in code Phase 2
+  wrote.** The last verification checkbox was unreachable as the code stood:
+  `createBrowserClient` throws `"Your project's URL and API key are required"`
+  on a missing URL, so with no env vars the app crashed rather than falling back.
+  Fixed at the source instead of in each caller —
+  [lib/supabase/client.ts](lib/supabase/client.ts) `createClient()` now returns
+  `null` when unconfigured, [lib/auth/provider.tsx](lib/auth/provider.tsx)
+  handles that null (stays signed out; `signIn`/`signUp` return a clear error
+  rather than throwing), and [lib/supabase/middleware.ts](lib/supabase/middleware.ts)
+  returns early so the proxy does not redirect everything to `/login` when there
+  is no auth to enforce. Phase 2's own verification passed only because env vars
+  were always present.
+- **The localStorage cascade now reads the plans key directly.** Dropping
+  `removeExerciseFromAllPlans` removed the only method the injected
+  `PlanRepository` was there for, so
+  [lib/repositories/local-storage/exercise-repository.ts](lib/repositories/local-storage/exercise-repository.ts)
+  does the cascade against `localStorage["workout-plans"]` itself. That deletes
+  `setPlanRepository`, the `planRepository` field, and the provider's
+  circular-dependency wiring — the plan asked for the wiring to go but did not
+  say what replaces the cascade's access path.
+- **No parameter properties in the Supabase repositories.** Both constructors
+  assign fields explicitly rather than using TypeScript's `private x` parameter
+  shorthand. The shorthand is a transform rather than pure type erasure, so
+  Node's `--experimental-strip-types` rejects it — which is what the throwaway
+  harness ran under. Costs three lines, keeps the files runnable by plain Node.
+- **`other@example.com`'s password is `other-password-123`**, not
+  `test-password-123`. The Phase 2 notes name the user but not its password, and
+  it is not in [supabase/seed.sql](supabase/seed.sql) — only `test@example.com`
+  is. Phase 4's `resetAndLogin` helper should use the seeded user; if it ever
+  needs the second user for an isolation test, that user exists only in the
+  local database and would not survive a `supabase db reset`.
+- **Leftover rows from Phase 2 were truncated.** Phase 2's manual UI check left
+  6 exercises, 1 plan and 1 link in the local database. Truncated before the
+  harness ran, and the harness cleans up after itself — the tables are back to
+  0/0/0.
+- **Harness ran as a script, not a dev-only page.** Step 5 allowed either. A
+  Node script sidesteps mounting React and lets it drive two signed-in users in
+  one process for the isolation check. It lived in the scratchpad, and is
+  deleted — `grep` for `verify-phase3` returns nothing.
 
 ---
 
@@ -506,6 +585,10 @@ with a seeded test user. This is the phase where the app actually changes over.
      fail. Add an `error` field to both hooks and render a minimal inline
      message. Do not let a failed write pass silently — the user would believe
      data was saved.
+   - The Phase 3 Supabase repositories **throw** the PostgREST error rather than
+     returning it, so every hook call site needs a `try`/`catch`. Note that RLS
+     denial is not among the throws: it returns empty data, so a missing row is
+     indistinguishable from a permission failure at this layer.
 
 6. **Rework [e2e/helpers.ts](e2e/helpers.ts)**
    - Replace `clearStorage` with `resetAndLogin(page)`:

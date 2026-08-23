@@ -22,12 +22,18 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const NOT_CONFIGURED = "Supabase is not configured";
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
   const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Nothing to load when Supabase is not configured -- the app stays signed
+  // out and falls back to the localStorage repositories.
+  const [isLoading, setIsLoading] = useState(supabase !== null);
 
   useEffect(() => {
+    if (!supabase) return;
+
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setIsLoading(false);
@@ -49,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       isLoading,
       signIn: async (email, password) => {
+        if (!supabase) return { error: NOT_CONFIGURED };
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -56,11 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: error?.message };
       },
       signUp: async (email, password) => {
+        if (!supabase) return { error: NOT_CONFIGURED };
         const { error } = await supabase.auth.signUp({ email, password });
         return { error: error?.message };
       },
       signOut: async () => {
-        await supabase.auth.signOut();
+        await supabase?.auth.signOut();
       },
     }),
     [session, isLoading, supabase]
