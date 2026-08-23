@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { useExercise } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { ExerciseForm } from "@/components/exercise-form";
+import { ErrorMessage } from "@/components/error-message";
 import type { StandaloneExercise } from "@/lib/types";
 
 export default function EditExercisePage({
@@ -16,10 +17,14 @@ export default function EditExercisePage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { exercise, isLoading, saveExercise } = useExercise(id);
+  const { exercise, isLoading, error, saveExercise } = useExercise(id);
 
   async function handleSave(updatedExercise: StandaloneExercise) {
-    await saveExercise(updatedExercise);
+    try {
+      await saveExercise(updatedExercise);
+    } catch {
+      return; // stay on the form; `error` below says what failed
+    }
     router.push(`/exercise/${id}`);
   }
 
@@ -62,6 +67,8 @@ export default function EditExercisePage({
         </Button>
         <h1 className="text-2xl font-bold">Edit Exercise</h1>
       </div>
+
+      <ErrorMessage error={error} />
 
       <ExerciseForm
         initialExercise={exercise}

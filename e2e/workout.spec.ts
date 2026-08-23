@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
-import { clearStorage, createExercise, createPlan } from "./helpers";
+import { resetAndLogin, createExercise, createPlan } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
-  await clearStorage(page);
+  await resetAndLogin(page);
 });
 
 test.describe("Workout Tracking", () => {

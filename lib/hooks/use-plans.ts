@@ -1,90 +1,134 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePlanRepository } from "../repositories";
 import type { WorkoutPlan } from "../types";
-import { workoutPlansSchema } from "../types";
 
-const STORAGE_KEY = "workout-plans";
-
-// Snapshot functions for useSyncExternalStore
-function getSnapshot(): string {
-  if (typeof window === "undefined") return "[]";
-  return localStorage.getItem(STORAGE_KEY) ?? "[]";
-}
-
-function getServerSnapshot(): string {
-  return "[]";
-}
-
-// Subscribe to both storage events and custom events
-function subscribe(callback: () => void): () => void {
-  const handleStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY || e.key === null) {
-      callback();
-    }
-  };
-
-  window.addEventListener("storage", handleStorage);
-  window.addEventListener("plans-updated", callback);
-
-  return () => {
-    window.removeEventListener("storage", handleStorage);
-    window.removeEventListener("plans-updated", callback);
-  };
+// PostgREST errors are plain objects with a `message`, not Error instances,
+// so `String(e)` on them yields "[object Object]".
+function message(e: unknown) {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object" && "message" in e) return String(e.message);
+  return String(e);
 }
 
 export function usePlans() {
   const repository = usePlanRepository();
+  const [plans, setPlans] = useState<WorkoutPlan[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Identity of the newest fetch. A response whose token is no longer the
+  // current one lost a race (or the component unmounted) and is dropped.
+  const latest = useRef<object>({});
 
-  const raw = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const parsed = workoutPlansSchema.safeParse(JSON.parse(raw));
-  const plans: WorkoutPlan[] = parsed.success
-    ? parsed.data.toSorted((a, b) => a.name.localeCompare(b.name))
-    : [];
+  const load = useCallback(async () => {
+    const token = (latest.current = {});
+    // Deliberately not setting isLoading here. It means "no data yet", not
+    // "a request is in flight": a refetch after a write would otherwise swap
+    // the page back to its Loading branch and remount the form the user is
+    // still filling in, losing their input.
+    try {
+      const data = await repository.getAll();
+      if (token !== latest.current) return;
+      setPlans(data);
+      setError(null);
+    } catch (e) {
+      if (token !== latest.current) return;
+      setError(message(e));
+    } finally {
+      if (token === latest.current) setIsLoading(false);
+    }
+  }, [repository]);
 
-  const refresh = useCallback(() => {
-    window.dispatchEvent(new Event("plans-updated"));
-  }, []);
+  useEffect(() => {
+    // A new repository (sign-in/sign-out) means the current rows belong to
+    // someone else, so this genuinely is "no data yet" again.
+    setIsLoading(true);
+    load();
+    // Invalidate whatever is in flight, so a response arriving after unmount
+    // does not setState.
+    return () => {
+      latest.current = {};
+    };
+  }, [load]);
 
   const savePlan = useCallback(
     async (plan: WorkoutPlan) => {
-      await repository.save(plan);
-      refresh();
+      try {
+        await repository.save(plan);
+      } catch (e) {
+        setError(message(e));
+        throw e;
+      }
+      await load();
     },
-    [repository, refresh]
+    [repository, load]
   );
 
   const deletePlan = useCallback(
     async (id: string) => {
-      await repository.delete(id);
-      refresh();
+      try {
+        await repository.delete(id);
+      } catch (e) {
+        setError(message(e));
+        throw e;
+      }
+      await load();
     },
-    [repository, refresh]
+    [repository, load]
   );
 
-  return { plans, isLoading: false, refresh, savePlan, deletePlan };
+  return { plans, isLoading, error, refresh: load, savePlan, deletePlan };
 }
 
 export function usePlan(id: string) {
   const repository = usePlanRepository();
+  const [plan, setPlan] = useState<WorkoutPlan | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const latest = useRef<object>({});
 
-  const raw = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const parsed = workoutPlansSchema.safeParse(JSON.parse(raw));
-  const plans: WorkoutPlan[] = parsed.success ? parsed.data : [];
-  const plan = plans.find((p) => p.id === id) ?? null;
+  const load = useCallback(async () => {
+    const token = (latest.current = {});
+    // isLoading means "no data yet", not "in flight" -- see usePlans.
+    try {
+      const data = await repository.getById(id);
+      if (token !== latest.current) return;
+      setPlan(data);
+      setError(null);
+    } catch (e) {
+      if (token !== latest.current) return;
+      setPlan(null);
+      setError(message(e));
+    } finally {
+      if (token === latest.current) setIsLoading(false);
+    }
+  }, [repository, id]);
 
-  const refresh = useCallback(() => {
-    window.dispatchEvent(new Event("plans-updated"));
-  }, []);
+  useEffect(() => {
+    // A new repository or id means the current value belongs to something
+    // else, so this genuinely is "no data yet" again.
+    setIsLoading(true);
+    load();
+    // Invalidate whatever is in flight, so a response arriving after unmount
+    // does not setState.
+    return () => {
+      latest.current = {};
+    };
+  }, [load]);
 
   const savePlan = useCallback(
     async (updatedPlan: WorkoutPlan) => {
-      await repository.save(updatedPlan);
-      refresh();
+      try {
+        await repository.save(updatedPlan);
+      } catch (e) {
+        setError(message(e));
+        throw e;
+      }
+      await load();
     },
-    [repository, refresh]
+    [repository, load]
   );
 
-  return { plan, isLoading: false, refresh, savePlan };
+  return { plan, isLoading, error, refresh: load, savePlan };
 }

@@ -12,12 +12,14 @@ import type { StandaloneExercise } from "@/lib/types";
 interface ExerciseModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (exercise: StandaloneExercise) => void;
+  onSave: (exercise: StandaloneExercise) => void | Promise<void>;
 }
 
 export function ExerciseModal({ open, onOpenChange, onSave }: ExerciseModalProps) {
-  function handleSave(exercise: StandaloneExercise) {
-    onSave(exercise);
+  async function handleSave(exercise: StandaloneExercise) {
+    // Close only once the save has landed -- the caller renders the new
+    // exercise from the store, which is a round-trip behind under Supabase.
+    await onSave(exercise);
     onOpenChange(false);
   }
 

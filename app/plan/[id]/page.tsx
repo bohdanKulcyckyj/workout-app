@@ -7,6 +7,7 @@ import { Pencil, Play, ArrowLeft } from "lucide-react";
 import { usePlan, useExercises } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { ExerciseTable } from "@/components/exercise-table";
+import { ErrorMessage } from "@/components/error-message";
 
 export default function PlanDetailPage({
   params,
@@ -15,8 +16,12 @@ export default function PlanDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { plan, isLoading } = usePlan(id);
-  const { exercises: allExercises } = useExercises();
+  const { plan, isLoading, error } = usePlan(id);
+  const {
+    exercises: allExercises,
+    isLoading: exercisesLoading,
+    error: exercisesError,
+  } = useExercises();
 
   const exerciseIds = plan?.exerciseIds;
   const exercises = useMemo(() => {
@@ -26,7 +31,9 @@ export default function PlanDetailPage({
       .filter(Boolean) as typeof allExercises;
   }, [exerciseIds, allExercises]);
 
-  if (isLoading) {
+  // Both hooks must settle: the table below is derived from the two together,
+  // so rendering on the first one alone flashes an empty exercise list.
+  if (isLoading || exercisesLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-muted-foreground">Loading...</div>
@@ -75,6 +82,8 @@ export default function PlanDetailPage({
           </Link>
         </Button>
       </div>
+
+      <ErrorMessage error={error ?? exercisesError} />
 
       <ExerciseTable exercises={exercises} />
     </div>

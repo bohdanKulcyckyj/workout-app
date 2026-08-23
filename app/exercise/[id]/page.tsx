@@ -7,6 +7,7 @@ import { Pencil, Trash2, ArrowLeft } from "lucide-react";
 import { useExercise, usePlans } from "@/lib/hooks";
 import { useExercises } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
+import { ErrorMessage } from "@/components/error-message";
 import {
   Dialog,
   DialogContent,
@@ -24,9 +25,9 @@ export default function ExerciseDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { exercise, isLoading } = useExercise(id);
-  const { deleteExercise } = useExercises();
-  const { plans } = usePlans();
+  const { exercise, isLoading, error } = useExercise(id);
+  const { deleteExercise, error: deleteError } = useExercises();
+  const { plans, isLoading: plansLoading, error: plansError } = usePlans();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Find plans that use this exercise
@@ -34,12 +35,17 @@ export default function ExerciseDetailPage({
     plan.exerciseIds.includes(id)
   );
 
-  function handleDelete() {
-    deleteExercise(id);
+  async function handleDelete() {
+    try {
+      await deleteExercise(id);
+    } catch {
+      return; // stay put; the list page would not show what went wrong
+    }
     router.push("/exercise");
   }
 
-  if (isLoading) {
+  // Both: "Used in Plans" and the delete dialog's plan count come from `plans`.
+  if (isLoading || plansLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-muted-foreground">Loading...</div>
@@ -128,6 +134,8 @@ export default function ExerciseDetailPage({
           </div>
         )}
       </div>
+
+      <ErrorMessage error={error ?? plansError ?? deleteError} />
 
       <div className="flex gap-3">
         <Button asChild className="flex-1">

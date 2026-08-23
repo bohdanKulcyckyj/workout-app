@@ -4,13 +4,16 @@ import Link from "next/link";
 import { Plus, Dumbbell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PlanListTable } from "@/components/plan-list-table";
+import { ErrorMessage } from "@/components/error-message";
 import { usePlans } from "@/lib/hooks";
 
 export default function HomePage() {
-  const { plans, isLoading, deletePlan } = usePlans();
+  const { plans, isLoading, error, deletePlan } = usePlans();
 
   function handleDelete(id: string) {
-    deletePlan(id);
+    // The hook puts the failure in `error`; swallow the rejection so it is not
+    // also an unhandled one.
+    deletePlan(id).catch(() => {});
   }
 
   if (isLoading) {
@@ -32,6 +35,8 @@ export default function HomePage() {
           </Link>
         </Button>
       </div>
+
+      <ErrorMessage error={error} />
 
       {plans.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">

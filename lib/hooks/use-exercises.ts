@@ -1,66 +1,81 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useExerciseRepository } from "../repositories";
 import type { StandaloneExercise } from "../types";
-import { standaloneExercisesSchema } from "../types";
 
-const STORAGE_KEY = "exercises";
-
-// Snapshot functions for useSyncExternalStore
-function getSnapshot(): string {
-  if (typeof window === "undefined") return "[]";
-  return localStorage.getItem(STORAGE_KEY) ?? "[]";
-}
-
-function getServerSnapshot(): string {
-  return "[]";
-}
-
-// Subscribe to both storage events and custom events
-function subscribe(callback: () => void): () => void {
-  const handleStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY || e.key === null) {
-      callback();
-    }
-  };
-
-  window.addEventListener("storage", handleStorage);
-  window.addEventListener("exercises-updated", callback);
-
-  return () => {
-    window.removeEventListener("storage", handleStorage);
-    window.removeEventListener("exercises-updated", callback);
-  };
+// PostgREST errors are plain objects with a `message`, not Error instances,
+// so `String(e)` on them yields "[object Object]".
+function message(e: unknown) {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object" && "message" in e) return String(e.message);
+  return String(e);
 }
 
 export function useExercises() {
   const repository = useExerciseRepository();
+  const [exercises, setExercises] = useState<StandaloneExercise[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Identity of the newest fetch. A response whose token is no longer the
+  // current one lost a race (or the component unmounted) and is dropped.
+  const latest = useRef<object>({});
 
-  const raw = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const parsed = standaloneExercisesSchema.safeParse(JSON.parse(raw));
-  const exercises: StandaloneExercise[] = parsed.success
-    ? parsed.data.toSorted((a, b) => a.label.localeCompare(b.label))
-    : [];
+  const load = useCallback(async () => {
+    const token = (latest.current = {});
+    // Deliberately not setting isLoading here. It means "no data yet", not
+    // "a request is in flight": a refetch after a write would otherwise swap
+    // the page back to its Loading branch and remount the form the user is
+    // still filling in, losing their input.
+    try {
+      const data = await repository.getAll();
+      if (token !== latest.current) return;
+      setExercises(data);
+      setError(null);
+    } catch (e) {
+      if (token !== latest.current) return;
+      setError(message(e));
+    } finally {
+      if (token === latest.current) setIsLoading(false);
+    }
+  }, [repository]);
 
-  const refresh = useCallback(() => {
-    window.dispatchEvent(new Event("exercises-updated"));
-  }, []);
+  useEffect(() => {
+    // A new repository (sign-in/sign-out) or id means the current value
+    // belongs to something else, so this genuinely is "no data yet" again.
+    setIsLoading(true);
+    load();
+    // Invalidate whatever is in flight, so a response arriving after unmount
+    // does not setState.
+    return () => {
+      latest.current = {};
+    };
+  }, [load]);
 
   const saveExercise = useCallback(
     async (exercise: StandaloneExercise) => {
-      await repository.save(exercise);
-      refresh();
+      try {
+        await repository.save(exercise);
+      } catch (e) {
+        setError(message(e));
+        throw e;
+      }
+      await load();
     },
-    [repository, refresh]
+    [repository, load]
   );
 
   const deleteExercise = useCallback(
     async (id: string) => {
-      await repository.delete(id);
-      refresh();
+      try {
+        await repository.delete(id);
+      } catch (e) {
+        setError(message(e));
+        throw e;
+      }
+      await load();
     },
-    [repository, refresh]
+    [repository, load]
   );
 
   const getExercisesByIds = useCallback(
@@ -72,8 +87,9 @@ export function useExercises() {
 
   return {
     exercises,
-    isLoading: false,
-    refresh,
+    isLoading,
+    error,
+    refresh: load,
     saveExercise,
     deleteExercise,
     getExercisesByIds,
@@ -82,23 +98,52 @@ export function useExercises() {
 
 export function useExercise(id: string) {
   const repository = useExerciseRepository();
+  const [exercise, setExercise] = useState<StandaloneExercise | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const latest = useRef<object>({});
 
-  const raw = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const parsed = standaloneExercisesSchema.safeParse(JSON.parse(raw));
-  const exercises: StandaloneExercise[] = parsed.success ? parsed.data : [];
-  const exercise = exercises.find((e) => e.id === id) ?? null;
+  const load = useCallback(async () => {
+    const token = (latest.current = {});
+    // isLoading means "no data yet", not "in flight" -- see useExercises.
+    try {
+      const data = await repository.getById(id);
+      if (token !== latest.current) return;
+      setExercise(data);
+      setError(null);
+    } catch (e) {
+      if (token !== latest.current) return;
+      setExercise(null);
+      setError(message(e));
+    } finally {
+      if (token === latest.current) setIsLoading(false);
+    }
+  }, [repository, id]);
 
-  const refresh = useCallback(() => {
-    window.dispatchEvent(new Event("exercises-updated"));
-  }, []);
+  useEffect(() => {
+    // A new repository (sign-in/sign-out) or id means the current value
+    // belongs to something else, so this genuinely is "no data yet" again.
+    setIsLoading(true);
+    load();
+    // Invalidate whatever is in flight, so a response arriving after unmount
+    // does not setState.
+    return () => {
+      latest.current = {};
+    };
+  }, [load]);
 
   const saveExercise = useCallback(
     async (updatedExercise: StandaloneExercise) => {
-      await repository.save(updatedExercise);
-      refresh();
+      try {
+        await repository.save(updatedExercise);
+      } catch (e) {
+        setError(message(e));
+        throw e;
+      }
+      await load();
     },
-    [repository, refresh]
+    [repository, load]
   );
 
-  return { exercise, isLoading: false, refresh, saveExercise };
+  return { exercise, isLoading, error, refresh: load, saveExercise };
 }

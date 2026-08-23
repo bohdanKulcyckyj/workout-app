@@ -8,7 +8,11 @@ export class LocalStoragePlanRepository implements PlanRepository {
     if (typeof window === "undefined") return [];
     const data = localStorage.getItem(STORAGE_KEY);
     if (!data) return [];
-    return JSON.parse(data) as WorkoutPlan[];
+    // Sorted here, matching the Supabase repo's order("name") -- the hooks used
+    // to sort and no longer do, so the contract lives in both implementations.
+    return (JSON.parse(data) as WorkoutPlan[]).toSorted((a, b) =>
+      a.name.localeCompare(b.name)
+    );
   }
 
   async getById(id: string): Promise<WorkoutPlan | null> {

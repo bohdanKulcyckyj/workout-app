@@ -9,7 +9,11 @@ export class LocalStorageExerciseRepository implements ExerciseRepository {
     if (typeof window === "undefined") return [];
     const data = localStorage.getItem(STORAGE_KEY);
     if (!data) return [];
-    return JSON.parse(data) as StandaloneExercise[];
+    // Sorted here, matching the Supabase repo's order("label") -- the hooks used
+    // to sort and no longer do, so the contract lives in both implementations.
+    return (JSON.parse(data) as StandaloneExercise[]).toSorted((a, b) =>
+      a.label.localeCompare(b.label)
+    );
   }
 
   async getById(id: string): Promise<StandaloneExercise | null> {

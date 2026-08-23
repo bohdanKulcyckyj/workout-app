@@ -29,7 +29,12 @@ export class SupabasePlanRepository implements PlanRepository {
       .select(COLUMNS)
       .eq("id", id)
       .maybeSingle();
-    if (error) throw error;
+    // 22P02 = the id is not a uuid, so no such row can exist. "Not found",
+    // not a failure -- a bookmarked/typo'd url must render Not Found.
+    if (error) {
+      if (error.code === "22P02") return null;
+      throw error;
+    }
     return data ? toPlan(data as PlanRow) : null;
   }
 

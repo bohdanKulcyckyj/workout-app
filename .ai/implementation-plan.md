@@ -15,6 +15,11 @@ bypass the repository entirely and read raw localStorage JSON through
 `useSyncExternalStore`. That cannot survive a network-backed store and must be
 rewritten.
 
+> **Status after Phase 4:** done. Both hooks now read through the repository with
+> `useState`/`useEffect`, expose `{ ..., isLoading, error, refresh, save*, delete* }`,
+> and `useSyncExternalStore` and the `plans-updated`/`exercises-updated` window
+> events are gone from the read path.
+
 ### Key Decisions
 
 - **Auth**: email + password only. No OAuth, no magic links, no SMTP dependency.
@@ -533,7 +538,7 @@ UI still reads localStorage — the new repositories are verified directly.
 
 ## Phase 4: Async Hooks & E2E Against Supabase
 
-- [ ] Complete
+- [x] Complete
 
 ### Goals
 
@@ -616,20 +621,131 @@ with a seeded test user. This is the phase where the app actually changes over.
 
 ### Verification
 
-- [ ] `supabase start` running, then all 11 spec files pass against it
-- [ ] Data created in a test is visible in local Studio under the test user
-- [ ] Signing out and back in shows the same data — it is genuinely server-side
-- [ ] Opening the app in a second browser profile as a different user shows an
-      empty state, not the first user's data
-- [ ] Loading states appear during fetches; no Not Found flash on detail pages
-- [ ] Workout page loads, checkboxes work, confetti fires on completion
-- [ ] Weight/reps edits during a workout persist to Supabase on finish
-      ([app/plan/[id]/workout/page.tsx:133-148](app/plan/[id]/workout/page.tsx#L133-L148))
-- [ ] Deleting an exercise removes it from plans that use it
-- [ ] No infinite re-render loops — check the console on every page
-- [ ] A forced failure (stop Supabase mid-session) surfaces an error rather than
-      silently appearing to succeed
-- [ ] `npx tsc --noEmit` passes; `npm run lint` clean
+- [x] `supabase start` running, then all 11 spec files pass against it — **68/68
+      tests passed** in 3.2m, run against a freshly `supabase db reset` database
+      so the result does not depend on accumulated local state
+- [x] Data created in a test is visible in local Studio under the test user —
+      checked at the source of truth instead: after creating "Push Day" through
+      the UI, `plans join auth.users` returned
+      `Push Day | test@example.com | 2 links`, and both exercises were present
+- [x] Signing out and back in shows the same data — signed out, signed in as
+      `other@example.com`, signed out, signed back in as `test@example.com`:
+      "Push Day / 2 exercises" returned intact. Nothing was in localStorage
+- [x] Opening the app as a different user shows an empty state, not the first
+      user's data — `other@example.com` saw "No workout plans yet", and
+      navigating directly to the first user's plan URL rendered "Plan Not
+      Found". Note this is the **empty state / Not Found**, not an error banner:
+      the RLS-filtered read returns `[]`, which is exactly the distinction the
+      error surfacing must not conflate
+- [x] Loading states appear during fetches; no Not Found flash on detail pages —
+      proven with a `MutationObserver` recording every distinct body state
+      across a client-side navigation, so a flash lasting a single frame would
+      still be caught. Plan detail, exercise detail and workout page each
+      recorded exactly `["LOADING", "LOADED"]` — `NOTFOUND` never appeared
+- [x] Workout page loads, checkboxes work, confetti fires on completion — both
+      rows rendered from Supabase, checking both took the counter to
+      "2 / 2 exercises done", and `document.querySelectorAll('canvas')` went
+      0 → 1 (canvas-confetti mounts its canvas on fire)
+- [x] Weight/reps edits during a workout persist to Supabase on finish — changed
+      Bench Press 60 → 72.5 mid-workout, ended the workout, and the database row
+      read `72.5` with `updated_at > created_at`. The untouched Overhead Press
+      row was correctly *not* written (`updated_at = created_at`), so the
+      change-detection guard still holds. 72.5 also re-confirms `numeric`
+      round-trips as a number
+- [x] Deleting an exercise removes it from plans that use it — the two
+      `exercise-cascade` specs covering one plan and multiple plans pass, and
+      they now prove the *database* cascade: the Supabase exercise repo's
+      `delete` is a bare `delete().eq("id", id)` with no application cascade
+- [x] No infinite re-render loops — check the console on every page — drove
+      plan list, exercise list, both create pages, both detail pages, both edit
+      pages and the workout page in a real browser: **0 React errors**, no
+      "Maximum update depth exceeded". The only console output was Next's HMR
+      WebSocket reconnect noise and a pre-existing Radix `aria-describedby`
+      warning from the exercise modal, neither related to this phase
+- [x] A forced failure (stop Supabase mid-session) surfaces an error rather than
+      silently appearing to succeed — `docker stop supabase_rest_workout-app`,
+      then a delete through the UI: the row stayed put and an inline alert read
+      **"An invalid response was received from the upstream server"**. The
+      database confirmed nothing was written. This check is what caught the
+      `[object Object]` bug — see Deviations
+- [x] `npx tsc --noEmit` passes; `npm run lint` clean — tsc clean; eslint at
+      **11 problems (6 errors, 5 warnings)**, byte-identical to the pre-Phase-3
+      baseline. No new lint problems were introduced
+
+Beyond the plan, the no-Supabase-env-vars fallback was re-verified, since this
+phase rewrites the exact read path that regression lives on: with `.env` and
+`.env.local` moved aside, `/` and `/exercise` return 200 with **zero** redirects
+(no `/login` wall), creating an exercise writes it to `localStorage["exercises"]`
+and renders it in the list, and the console is clean — 0 errors, 0 warnings.
+
+### Deviations from plan
+
+- **Step 3 was already done.** All five detail pages already checked `isLoading`
+  before `!plan`; the ordering the plan warns about was correct in the code as
+  written. The real work was the opposite problem — see the next two entries.
+- **`isLoading` had to mean "no data yet", not "a request is in flight".** The
+  plan's model of `isLoading` breaks on refetch. Setting it true inside `load()`
+  meant that saving an exercise from the modal inside the plan form swapped the
+  page to its Loading branch, **unmounting `PlanForm` and destroying the user's
+  half-filled form** — the typed plan name and the selected exercises both
+  vanished. Caught in the browser, not by the suite: the two failing specs only
+  reported a wrong row count. `isLoading` is now set at the *effect* (first load,
+  and when the repository or id changes), never on a refetch.
+- **Detail pages must gate on both hooks, not one.** Pages that derive their
+  content from a plan *and* the exercise list (plan detail, plan edit, workout,
+  and plan create for its dropdown) render an empty table if only the first hook
+  has settled. Each now waits for both. Exercise detail additionally waits on
+  `usePlans`, since the delete dialog's "used in N plans" count comes from it.
+- **A non-UUID id is a PostgREST error, not an empty result.** Two existing specs
+  visit `/exercise/nonexistent-id`; Postgres rejects that with `22P02` (verified
+  at the raw HTTP layer: `400 {"code":"22P02"}`). Left alone this rendered an
+  error banner instead of "Not Found". Fixed in `getById` on both Supabase
+  repositories — one guard where every caller routes through, rather than
+  special-casing in the hooks or the pages.
+- **The save→navigate chain dropped its promise in three places.** `ExerciseForm`
+  → `ExerciseModal` → `PlanForm` all typed `onSave` as `() => void` and never
+  awaited. Free under localStorage; under Supabase the modal closed and the row
+  was added before the write landed, so the new exercise rendered as nothing.
+  All three now thread `void | Promise<void>` and await. This also keeps
+  react-hook-form's `isSubmitting` true for the real duration of the write.
+- **`service_role` had no DML grant** — new migration
+  [supabase/migrations/20260823120000_grant_service_role.sql](supabase/migrations/20260823120000_grant_service_role.sql).
+  Phase 1 granted `authenticated` only, so the E2E reset helper was refused with
+  `permission denied for table plans` before RLS was consulted. Added as a new
+  migration rather than editing the applied one, which is already pushed remote.
+- **`process.loadEnvFile` does not overwrite already-set variables**, and `.env`
+  holds the **remote** project URL while `.env.local` holds the local one.
+  Loading them in the obvious order would have pointed the entire E2E suite at
+  production. [playwright.config.ts](playwright.config.ts) loads `.env.local`
+  first, deliberately, with a comment saying why. Verified the semantics directly
+  rather than assuming them. Node's stdlib `loadEnvFile` also meant no `dotenv`
+  dependency for two files.
+- **PostgREST errors are plain objects, so `String(e)` yields `[object Object]`.**
+  The forced-failure check is what exposed this — the first version surfaced a
+  literal `[object Object]` to the user. The `message()` helper in both hooks now
+  reads `.message` off any object before falling back to `String(e)`.
+- **Sorting moved into the localStorage repositories.** The hooks used to sort
+  client-side; the Supabase repos sort in SQL via `order("name")`/`order("label")`.
+  Rather than re-sorting in the hooks, the two localStorage repos now sort in
+  `getAll()`, so both implementations honour the same contract and the hooks stay
+  free of it.
+- **`other@example.com` is now in [supabase/seed.sql](supabase/seed.sql).** It
+  existed only in the local database and would not have survived a
+  `supabase db reset`, as Phase 3 flagged. Added properly (id
+  `2222...`, password `other-password-123`) so the RLS isolation check is
+  reproducible from a clean reset.
+- **One new component**, [components/error-message.tsx](components/error-message.tsx)
+  — nine lines wrapping the `role="alert" text-sm text-destructive` idiom the
+  forms already use, rather than repeating it in nine pages.
+- **Write failures rethrow from the hooks** so save handlers can skip their
+  `router.push`, while the hook records the message in `error`. Fire-and-forget
+  callers (`handleDelete` on the two list pages) `.catch(() => {})` so the
+  already-recorded failure is not also an unhandled rejection.
+- **The workout page's dead `exercises-updated` event was removed.** Nothing
+  listens for it now that the hooks no longer subscribe to window events; the
+  pages it navigates to refetch on mount. The `useMemo`/`exercisesLoaded` latch
+  needed no change and was confirmed to hold when the two hooks resolve at
+  different times.
 
 ---
 
@@ -653,7 +769,10 @@ migration path and the tooling.
      its plans; reading it directly would import nothing useful. Chaining the
      existing migration normalises the shape before import.
    - Read from localStorage directly (not via the repositories — those now point
-     at Supabase).
+     at Supabase). Note the localStorage repositories' `getAll()` now sorts
+     (Phase 4 moved the hooks' sort down into them), so read the raw keys rather
+     than going through `LocalStorage*Repository` if insertion order matters.
+     `plan.exerciseIds` order must be preserved either way — it is rendered.
    - **Idempotency**, which is the explicit requirement here:
      - Exercises and plans carry client-generated UUIDs already, so `upsert` on
        the primary key is naturally idempotent — re-running overwrites the same
@@ -683,6 +802,10 @@ migration path and the tooling.
 3. **Test the import**
    - Add `e2e/import.spec.ts`: seed localStorage with known data before sign-in,
      sign in, run the import, assert the data appears.
+   - The helper is now `resetAndLogin(page)` from
+     [e2e/helpers.ts](e2e/helpers.ts) (Phase 4 replaced `clearStorage`). It
+     truncates the user's rows via `service_role` **and** signs in, so seed
+     localStorage *after* calling it — it navigates to `/login` first.
    - **Assert idempotency explicitly**: clear the marker, run the import a
      second time, and assert counts are unchanged. This is the requirement, so
      it needs a test rather than an argument.
@@ -739,10 +862,14 @@ migration path and the tooling.
 
 - **Docker is a hard dependency** for the local stack and therefore for E2E from
   Phase 4 on. Verify at the start of Phase 1, not at Phase 4.
-- **`numeric` → string.** Postgres returns `numeric` as a string. Missing this
-  in the mapper produces Zod parse failures that look like data corruption.
-  Alternatively, type `weight` as `real` — but `numeric` is the correct choice
-  for the 0.5kg increments the form uses ([components/exercise-form.tsx:105](components/exercise-form.tsx#L105)).
+- ~~**`numeric` → string.**~~ **Did not hold.** PostgREST serialises `numeric` as
+  a JSON *number* on this stack — verified in Phase 3 at the raw HTTP layer
+  (`{"weight":62.5}`, unquoted) and again in Phase 4 through the full UI
+  (a 72.5 kg workout edit round-tripped as a number). The `Number(...)` coercion
+  in [lib/supabase/mappers.ts](lib/supabase/mappers.ts) is kept as cheap defence,
+  not because the string case was ever observed. `numeric` remains the right
+  column type for the 0.5kg increments the form uses
+  ([components/exercise-form.tsx:105](components/exercise-form.tsx#L105)).
 - **RLS returns empty, not errors.** A misconfigured policy looks like "no data"
   rather than "permission denied", which reads as a bug in the app. The
   two-user isolation check in Phase 1 is what distinguishes them.

@@ -5,14 +5,19 @@ import { ArrowLeft } from "lucide-react";
 import { useExercises } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { ExerciseForm } from "@/components/exercise-form";
+import { ErrorMessage } from "@/components/error-message";
 import type { StandaloneExercise } from "@/lib/types";
 
 export default function CreateExercisePage() {
   const router = useRouter();
-  const { saveExercise } = useExercises();
+  const { saveExercise, error } = useExercises();
 
   async function handleSave(exercise: StandaloneExercise) {
-    await saveExercise(exercise);
+    try {
+      await saveExercise(exercise);
+    } catch {
+      return; // stay on the form; `error` below says what failed
+    }
     router.push("/exercise");
   }
 
@@ -30,6 +35,8 @@ export default function CreateExercisePage() {
         </Button>
         <h1 className="text-2xl font-bold">Create Exercise</h1>
       </div>
+
+      <ErrorMessage error={error} />
 
       <ExerciseForm
         onSave={handleSave}
