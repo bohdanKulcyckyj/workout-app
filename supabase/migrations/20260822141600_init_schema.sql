@@ -43,3 +43,10 @@ create trigger exercises_set_updated_at before update on public.exercises
 
 create trigger plans_set_updated_at before update on public.plans
   for each row execute function public.set_updated_at();
+
+-- Table grants and RLS are independent layers: without a grant PostgREST is
+-- refused (42501) before any policy is consulted. Granting to authenticated
+-- only -- these tables have no anonymous access, so anon gets nothing.
+grant select, insert, update, delete
+  on public.exercises, public.plans, public.plan_exercises
+  to authenticated;

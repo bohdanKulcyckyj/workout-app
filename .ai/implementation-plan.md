@@ -148,7 +148,7 @@ Tests (11 spec files, ~1370 lines):
 
 ## Phase 1: Supabase Project, Schema & RLS
 
-- [ ] Complete
+- [x] Complete
 
 ### Goals
 
@@ -215,18 +215,50 @@ localStorage. This phase is verifiable purely at the database level.
 
 ### Verification
 
-- [ ] `docker info` succeeds
-- [ ] `supabase start` brings the stack up; Studio reachable at `http://localhost:54323`
-- [ ] `supabase db reset` applies all migrations and the seed with no errors
-- [ ] All three tables exist with the specified columns and constraints
-- [ ] `select relrowsecurity from pg_class where relname in ('exercises','plans','plan_exercises')` returns `true` for all three
-- [ ] Deleting an `exercises` row cascades: its `plan_exercises` rows disappear
-- [ ] Deleting a `plans` row cascades: its `plan_exercises` rows disappear
-- [ ] RLS isolation proven with two users: create two users via the local auth
-      API, insert an exercise as user A, and confirm a query authenticated as
-      user B returns zero rows (not an error — RLS filters silently)
-- [ ] Updating a row bumps `updated_at` without the client sending it
-- [ ] `supabase db push` applies the same migrations to the remote project
+- [x] `docker info` succeeds
+- [x] `supabase start` brings the stack up; Studio reachable at `http://localhost:54423`
+      (ports shifted — see Deviations)
+- [x] `supabase db reset` applies all migrations and the seed with no errors
+- [x] All three tables exist with the specified columns and constraints
+- [x] `select relrowsecurity from pg_class where relname in ('exercises','plans','plan_exercises')` returns `true` for all three
+- [x] Deleting an `exercises` row cascades: its `plan_exercises` rows disappear
+      (3 links → 2 on one exercise delete)
+- [x] Deleting a `plans` row cascades: its `plan_exercises` rows disappear
+      (2 links → 0; the 3 exercises survive)
+- [x] RLS isolation proven with two users: owner reads 3 exercises / 1 plan /
+      1 link, stranger reads 0/0/0 — filtered silently, no error
+- [x] Updating a row bumps `updated_at` without the client sending it
+- [x] `supabase db push` applies the same migrations to the remote project
+      (both migrations listed local↔remote)
+
+Beyond the plan, the write-side policies were checked too, since read isolation
+alone would not catch them: a second user cannot insert a row owned by another
+user, cannot reassign an existing row to itself (0 rows stolen), and cannot
+attach another user's exercise to its own plan. All three are rejected by RLS.
+
+### Deviations from plan
+
+- **Local ports shifted 543xx → 544xx** ([supabase/config.toml](supabase/config.toml)).
+  The default ports collided with another local Supabase project already
+  running on this machine (`houshold-duties-manager`). Studio is now
+  `http://127.0.0.1:54423`, API `54421`, db `54422`. Note `supabase start`
+  exits 0 even when this collision aborts the startup — check `supabase status`
+  rather than trusting the exit code.
+- **Table grants added** to the schema migration. RLS policies and table grants
+  are independent layers; without `grant ... to authenticated`, PostgREST is
+  refused with `42501` before any policy is consulted. Granted to
+  `authenticated` only — these tables have no anonymous access.
+- **Seed sets the auth token columns to `''`**, not `NULL`. GoTrue scans
+  `confirmation_token` and friends into non-nullable Go strings, so a `NULL`
+  makes every sign-in fail with a 500 rather than a clean auth error.
+- **Remote vs local anon behaviour differs harmlessly.** The remote project
+  pre-grants `anon` at the schema level, so an anonymous read reaches RLS and
+  returns `[]`; locally it is refused earlier at the grant layer. Both are
+  secure — RLS is the boundary in both cases, and anonymous writes are
+  rejected on both.
+- **Remote project**: ref `ziyvvujjnmxmsermgxwj`, eu-central-1. The DB password
+  is in the gitignored `.env` as `SUPABASE_DB_PASSWORD`; Supabase shows it only
+  once, so it also belongs in a password manager.
 
 ---
 

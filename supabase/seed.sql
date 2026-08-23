@@ -2,17 +2,23 @@
 -- test@example.com / test-password-123
 -- No plans or exercises: tests create their own data from a clean slate.
 
+-- The *_token columns must be '' and not NULL: GoTrue scans them into
+-- non-nullable Go strings, and a NULL fails every sign-in with a 500
+-- ("converting NULL to string is unsupported"), not a clean auth error.
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password,
   email_confirmed_at, created_at, updated_at,
-  raw_app_meta_data, raw_user_meta_data
+  raw_app_meta_data, raw_user_meta_data,
+  confirmation_token, recovery_token,
+  email_change_token_new, email_change_token_current, email_change
 ) values (
   '00000000-0000-0000-0000-000000000000',
   '11111111-1111-1111-1111-111111111111',
   'authenticated', 'authenticated', 'test@example.com',
   crypt('test-password-123', gen_salt('bf')),
   now(), now(), now(),
-  '{"provider":"email","providers":["email"]}', '{}'
+  '{"provider":"email","providers":["email"]}', '{}',
+  '', '', '', '', ''
 ) on conflict (id) do nothing;
 
 insert into auth.identities (
