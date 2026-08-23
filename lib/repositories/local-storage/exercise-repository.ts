@@ -1,20 +1,19 @@
-import type { StandaloneExercise } from "../../types";
-import type { ExerciseRepository, PlanRepository } from "../types";
+import type { StandaloneExercise, WorkoutPlan } from "../../types";
+import type { ExerciseRepository } from "../types";
 
 const STORAGE_KEY = "exercises";
+const PLANS_KEY = "workout-plans";
 
 export class LocalStorageExerciseRepository implements ExerciseRepository {
-  private planRepository: PlanRepository | null = null;
-
-  setPlanRepository(planRepository: PlanRepository): void {
-    this.planRepository = planRepository;
-  }
-
   async getAll(): Promise<StandaloneExercise[]> {
     if (typeof window === "undefined") return [];
     const data = localStorage.getItem(STORAGE_KEY);
     if (!data) return [];
-    return JSON.parse(data) as StandaloneExercise[];
+    // Sorted here, matching the Supabase repo's order("label") -- the hooks used
+    // to sort and no longer do, so the contract lives in both implementations.
+    return (JSON.parse(data) as StandaloneExercise[]).toSorted((a, b) =>
+      a.label.localeCompare(b.label)
+    );
   }
 
   async getById(id: string): Promise<StandaloneExercise | null> {
@@ -48,9 +47,18 @@ export class LocalStorageExerciseRepository implements ExerciseRepository {
     const exercises = (await this.getAll()).filter((e) => e.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(exercises));
 
-    // Cascade: remove exercise ID from all plans
-    if (this.planRepository) {
-      await this.planRepository.removeExerciseFromAllPlans(id);
+    // Cascade: remove exercise ID from all plans. Supabase gets this from an
+    // FK cascade; localStorage has no database, so it does it by hand.
+    const plansRaw = localStorage.getItem(PLANS_KEY);
+    if (plansRaw) {
+      const plans = JSON.parse(plansRaw) as WorkoutPlan[];
+      if (plans.some((p) => p.exerciseIds.includes(id))) {
+        for (const plan of plans) {
+          plan.exerciseIds = plan.exerciseIds.filter((e) => e !== id);
+        }
+        localStorage.setItem(PLANS_KEY, JSON.stringify(plans));
+        window.dispatchEvent(new Event("plans-updated"));
+      }
     }
 
     window.dispatchEvent(new Event("exercises-updated"));

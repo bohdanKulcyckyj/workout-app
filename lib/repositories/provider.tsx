@@ -1,16 +1,39 @@
 "use client";
 
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import type { PlanRepository, ExerciseRepository } from "./types";
 import {
   LocalStoragePlanRepository,
   LocalStorageExerciseRepository,
 } from "./local-storage";
+import { SupabasePlanRepository } from "./supabase/plan-repository";
+import { SupabaseExerciseRepository } from "./supabase/exercise-repository";
+import { createClient } from "../supabase/client";
+import { useAuth } from "../auth/provider";
 import { migrateLocalStorage } from "../migrations";
+
+const hasSupabaseEnv = Boolean(
+  process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 interface RepositoryContextValue {
   planRepository: PlanRepository;
   exerciseRepository: ExerciseRepository;
+  /**
+   * Re-issue the repositories, so every mounted hook refetches. The hooks key
+   * their effect on repository identity, so a new instance is the refresh
+   * signal they already understand. Used after a bulk import.
+   */
+  reload: () => void;
 }
 
 const RepositoryContext = createContext<RepositoryContextValue | null>(null);
@@ -26,24 +49,48 @@ export function RepositoryProvider({
   planRepository,
   exerciseRepository,
 }: RepositoryProviderProps) {
-  const value = useMemo(() => {
-    // Migrate legacy data before creating repositories
+  const { user } = useAuth();
+  const userId = hasSupabaseEnv ? (user?.id ?? null) : null;
+  // The repositories are rebuilt whenever this changes; `reload` swaps in a
+  // fresh object so the hooks, which key their effect on repository identity,
+  // refetch. Used after a bulk import.
+  const [epoch, setEpoch] = useState<object>({});
+  const reload = useCallback(() => setEpoch({}), []);
+
+  useEffect(() => {
+    // Side effect, so not in the useMemo below -- StrictMode double-invokes it
     migrateLocalStorage();
+  }, []);
 
-    const planRepo = planRepository ?? new LocalStoragePlanRepository();
-    const exerciseRepo =
-      exerciseRepository ?? new LocalStorageExerciseRepository();
+  // Which backend is serving this session. ponytail: remove with the
+  // localStorage path in Phase 6.
+  useEffect(() => {
+    console.info(
+      userId
+        ? `[repositories] backend=supabase user=${userId}`
+        : "[repositories] backend=localStorage"
+    );
+  }, [userId]);
 
-    // Wire up circular dependency for cascade delete
-    if (exerciseRepo instanceof LocalStorageExerciseRepository) {
-      exerciseRepo.setPlanRepository(planRepo);
-    }
+  const value = useMemo(() => {
+    void epoch; // part of the memo key: a new epoch means new repositories
+    // Signed in with Supabase configured -> server-backed; otherwise localStorage
+    const supabase = userId ? createClient() : null;
 
     return {
-      planRepository: planRepo,
-      exerciseRepository: exerciseRepo,
+      planRepository:
+        planRepository ??
+        (supabase && userId
+          ? new SupabasePlanRepository(supabase, userId)
+          : new LocalStoragePlanRepository()),
+      exerciseRepository:
+        exerciseRepository ??
+        (supabase && userId
+          ? new SupabaseExerciseRepository(supabase, userId)
+          : new LocalStorageExerciseRepository()),
+      reload,
     };
-  }, [planRepository, exerciseRepository]);
+  }, [planRepository, exerciseRepository, userId, reload, epoch]);
 
   return (
     <RepositoryContext.Provider value={value}>

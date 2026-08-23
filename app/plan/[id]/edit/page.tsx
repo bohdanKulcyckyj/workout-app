@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { usePlan, useExercises } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { PlanForm } from "@/components/plan-form";
+import { ErrorMessage } from "@/components/error-message";
 import type { WorkoutPlan, StandaloneExercise } from "@/lib/types";
 
 export default function EditPlanPage({
@@ -16,10 +17,17 @@ export default function EditPlanPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { plan, isLoading, savePlan } = usePlan(id);
-  const { exercises, saveExercise } = useExercises();
+  const { plan, isLoading, error, savePlan } = usePlan(id);
+  const {
+    exercises,
+    isLoading: exercisesLoading,
+    error: exercisesError,
+    saveExercise,
+  } = useExercises();
 
-  if (isLoading) {
+  // Both: the form resolves the plan's exercise ids against `exercises`, so it
+  // must not mount until that list has arrived.
+  if (isLoading || exercisesLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-muted-foreground">Loading...</div>
@@ -45,7 +53,11 @@ export default function EditPlanPage({
   }
 
   async function handleSave(updatedPlan: WorkoutPlan) {
-    await savePlan(updatedPlan);
+    try {
+      await savePlan(updatedPlan);
+    } catch {
+      return; // stay on the form; `error` above says what failed
+    }
     router.push(`/plan/${updatedPlan.id}`);
   }
 
@@ -67,6 +79,8 @@ export default function EditPlanPage({
         </Button>
         <h1 className="text-2xl font-bold">Edit Plan</h1>
       </div>
+
+      <ErrorMessage error={error ?? exercisesError} />
 
       <PlanForm
         initialPlan={plan}

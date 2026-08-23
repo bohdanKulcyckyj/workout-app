@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { RepositoryProvider } from "@/lib/repositories";
+import { AuthProvider } from "@/lib/auth/provider";
 import { NavHeader } from "@/components/nav-header";
+import { ImportPrompt } from "@/components/import-prompt";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,12 +37,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <RepositoryProvider>
-          <div className="mx-auto max-w-lg px-4 py-6">
-            <NavHeader />
-            {children}
-          </div>
-        </RepositoryProvider>
+        <AuthProvider>
+          <RepositoryProvider>
+            <div className="mx-auto max-w-lg px-4 py-6">
+              <NavHeader />
+              <ImportPrompt />
+              {children}
+            </div>
+          </RepositoryProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -4,13 +4,16 @@ import Link from "next/link";
 import { Plus, Dumbbell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ExerciseListTable } from "@/components/exercise-list-table";
+import { ErrorMessage } from "@/components/error-message";
 import { useExercises } from "@/lib/hooks";
 
 export default function ExerciseListPage() {
-  const { exercises, isLoading, deleteExercise } = useExercises();
+  const { exercises, isLoading, error, deleteExercise } = useExercises();
 
   function handleDelete(id: string) {
-    deleteExercise(id);
+    // The hook puts the failure in `error`; swallow the rejection so it is not
+    // also an unhandled one.
+    deleteExercise(id).catch(() => {});
   }
 
   if (isLoading) {
@@ -32,6 +35,8 @@ export default function ExerciseListPage() {
           </Link>
         </Button>
       </div>
+
+      <ErrorMessage error={error} />
 
       {exercises.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">

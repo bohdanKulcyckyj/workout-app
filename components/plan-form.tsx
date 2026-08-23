@@ -28,8 +28,8 @@ type PlanFormValues = z.infer<typeof planFormSchema>;
 interface PlanFormProps {
   initialPlan?: WorkoutPlan;
   allExercises: StandaloneExercise[];
-  onSave: (plan: WorkoutPlan, exerciseIds: string[]) => void;
-  onExerciseCreate: (exercise: StandaloneExercise) => void;
+  onSave: (plan: WorkoutPlan, exerciseIds: string[]) => void | Promise<void>;
+  onExerciseCreate: (exercise: StandaloneExercise) => void | Promise<void>;
   submitLabel?: string;
 }
 
@@ -72,13 +72,15 @@ export function PlanForm({
     setSelectedExerciseIds((prev) => prev.filter((id) => id !== exerciseId));
   }
 
-  function handleCreateExercise(exercise: StandaloneExercise) {
-    onExerciseCreate(exercise);
-    // Add the new exercise to the plan
+  async function handleCreateExercise(exercise: StandaloneExercise) {
+    // Await the save: the row below renders by looking the id up in
+    // `allExercises`, so adding it before the store has the exercise renders
+    // nothing. Free under localStorage, a round-trip under Supabase.
+    await onExerciseCreate(exercise);
     setSelectedExerciseIds((prev) => [...prev, exercise.id]);
   }
 
-  function onSubmit(data: PlanFormValues) {
+  async function onSubmit(data: PlanFormValues) {
     const now = new Date().toISOString();
 
     const plan: WorkoutPlan = {
@@ -89,7 +91,7 @@ export function PlanForm({
       updatedAt: now,
     };
 
-    onSave(plan, selectedExerciseIds);
+    await onSave(plan, selectedExerciseIds);
   }
 
   return (

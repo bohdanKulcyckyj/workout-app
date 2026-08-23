@@ -9,3 +9,5 @@ export {
   LocalStoragePlanRepository,
   LocalStorageExerciseRepository,
 } from "./local-storage";
+export { SupabasePlanRepository } from "./supabase/plan-repository";
+export { SupabaseExerciseRepository } from "./supabase/exercise-repository";

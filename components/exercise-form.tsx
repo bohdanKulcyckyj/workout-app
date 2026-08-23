@@ -19,7 +19,7 @@ type ExerciseFormValues = z.infer<typeof exerciseFormSchema>;
 
 interface ExerciseFormProps {
   initialExercise?: StandaloneExercise;
-  onSave: (exercise: StandaloneExercise) => void;
+  onSave: (exercise: StandaloneExercise) => void | Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
 }
@@ -53,7 +53,9 @@ export function ExerciseForm({
     defaultValues,
   });
 
-  function onSubmit(data: ExerciseFormValues) {
+  // async so react-hook-form keeps isSubmitting true until the save lands,
+  // and so callers that need the write to have completed can await it.
+  async function onSubmit(data: ExerciseFormValues) {
     const exercise: StandaloneExercise = {
       id: initialExercise?.id ?? crypto.randomUUID(),
       label: data.label,
@@ -61,7 +63,7 @@ export function ExerciseForm({
       weight: data.weight,
       reps: data.reps,
     };
-    onSave(exercise);
+    await onSave(exercise);
   }
 
   return (

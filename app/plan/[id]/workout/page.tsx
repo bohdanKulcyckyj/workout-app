@@ -11,6 +11,7 @@ import { useExerciseRepository } from "@/lib/repositories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ErrorMessage } from "@/components/error-message";
 import {
   Table,
   TableBody,
@@ -48,12 +49,17 @@ export default function WorkoutModePage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { plan, isLoading } = usePlan(id);
-  const { exercises: allExercises } = useExercises();
+  const { plan, isLoading, error } = usePlan(id);
+  const {
+    exercises: allExercises,
+    isLoading: exercisesLoading,
+    error: exercisesError,
+  } = useExercises();
   const exerciseRepository = useExerciseRepository();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [exitDestination, setExitDestination] = useState<string>("/");
   const [exercisesLoaded, setExercisesLoaded] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Derive workout exercises from plan's exerciseIds and the exercise store
   const initialWorkoutExercises = useMemo((): WorkoutExercise[] => {
@@ -133,21 +139,36 @@ export default function WorkoutModePage({
   async function finishWorkout(destination?: string) {
     // Persist any weight/reps changes back to the exercise entities
     const currentExercises = getValues("exercises");
-    for (const we of currentExercises) {
-      const stored = allExercises.find((e) => e.id === we.id);
-      if (stored && (stored.weight !== we.weight || stored.reps !== we.reps)) {
-        await exerciseRepository.save({
-          ...stored,
-          weight: we.weight,
-          reps: we.reps,
-        });
+    try {
+      for (const we of currentExercises) {
+        const stored = allExercises.find((e) => e.id === we.id);
+        if (stored && (stored.weight !== we.weight || stored.reps !== we.reps)) {
+          await exerciseRepository.save({
+            ...stored,
+            weight: we.weight,
+            reps: we.reps,
+          });
+        }
       }
+    } catch (e) {
+      // Do not navigate away on a failed write -- the user would believe the
+      // session was saved.
+      // PostgREST errors are plain objects carrying `message`, not Errors.
+      setSaveError(
+        e && typeof e === "object" && "message" in e
+          ? String(e.message)
+          : String(e)
+      );
+      setShowConfirmDialog(false);
+      return;
     }
-    window.dispatchEvent(new Event("exercises-updated"));
+    // The pages we navigate to refetch on mount, so nothing to notify here.
     router.push(destination ?? exitDestination);
   }
 
-  if (isLoading) {
+  // Both: the workout rows are derived from the plan's ids and the exercise
+  // list together, so rendering on the first one alone shows an empty table.
+  if (isLoading || exercisesLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-muted-foreground">Loading...</div>
@@ -260,6 +281,8 @@ export default function WorkoutModePage({
           })}
         </TableBody>
       </Table>
+
+      <ErrorMessage error={error ?? exercisesError ?? saveError} />
 
       <Button onClick={() => handleExit("/")} className="w-full cursor-pointer" size="lg">
         End Workout

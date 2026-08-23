@@ -1,16 +1,6 @@
-I would like to make exercise a standalone entity, that can be part of multiple workout plans.
+Current app has no backend - no auth/authz, no stored data on server - all is kept in local storage. I would like to change that and use supabase.
 
-Exercise entity should have:
+The goal is to prepare our project for storing stuff on backend and setup supabase connection and setup deployment pipeline. Map our entity model and analyze how we could have set it up in supabase and keep in mind that in near future we would like to extend entities.
 
-- id (string)*
-- label (string)*
-- description (string) optional
-- weight (number) optional
-- reps (number) optional
-
-As exercise becomes an entity we need to manage it. We need following pages:
-
-- List exercises page ( similar to list workout plans )
-- Detail exercise ( preview and edit mode )
-
-In `/components/plan-form.tsx` instead of having a button "+ Add Exercise" we are going to need different approach of adding new exercise. We could do it from dropdown select of existing exercises.
+*note:*
+I should have supabase cli here with credentials so you can create a new project from here. But let me know if something blocks you
