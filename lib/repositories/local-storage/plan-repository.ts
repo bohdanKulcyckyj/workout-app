@@ -8,11 +8,17 @@ export class LocalStoragePlanRepository implements PlanRepository {
     if (typeof window === "undefined") return [];
     const data = localStorage.getItem(STORAGE_KEY);
     if (!data) return [];
+    // exerciseIds may be missing: a legacy browser's plans carry an inline
+    // `exercises` array instead, and the read can land before the migration
+    // effect runs. Default it here, where every caller routes through --
+    // PlanListTable reads .length on it and would crash the page.
+    const plans = (JSON.parse(data) as WorkoutPlan[]).map((plan) => ({
+      ...plan,
+      exerciseIds: plan.exerciseIds ?? [],
+    }));
     // Sorted here, matching the Supabase repo's order("name") -- the hooks used
     // to sort and no longer do, so the contract lives in both implementations.
-    return (JSON.parse(data) as WorkoutPlan[]).toSorted((a, b) =>
-      a.name.localeCompare(b.name)
-    );
+    return plans.toSorted((a, b) => a.name.localeCompare(b.name));
   }
 
   async getById(id: string): Promise<WorkoutPlan | null> {

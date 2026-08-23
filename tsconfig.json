@@ -9,6 +9,9 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    // The import self-check runs under plain `node --experimental-strip-types`,
+    // which needs the .ts extension on its import. noEmit is on, so this is safe.
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",

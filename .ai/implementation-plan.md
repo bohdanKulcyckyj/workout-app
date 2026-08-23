@@ -20,6 +20,13 @@ rewritten.
 > and `useSyncExternalStore` and the `plans-updated`/`exercises-updated` window
 > events are gone from the read path.
 
+> **Status after Phase 5:** all five phases complete. The localStorage → Supabase
+> import ships behind a dismissible banner, the `db:*` scripts are in
+> [package.json](package.json), and the README documents the setup, the schema
+> and the deploy. 76/76 E2E specs pass. The one open item is the production
+> deploy itself (Vercel env vars + Supabase redirect URLs), which needs console
+> access rather than code — see Phase 5 Deviations.
+
 ### Key Decisions
 
 - **Auth**: email + password only. No OAuth, no magic links, no SMTP dependency.
@@ -751,7 +758,7 @@ and renders it in the list, and the console is clean — 0 errors, 0 warnings.
 
 ## Phase 5: Data Import & Deployment Script
 
-- [ ] Complete
+- [x] Complete
 
 ### Goals
 
@@ -840,21 +847,107 @@ migration path and the tooling.
 
 ### Verification
 
-- [ ] Import with legacy inline-exercise localStorage brings data across intact
-- [ ] Import with current-format localStorage brings data across intact
-- [ ] Plan → exercise associations and their order survive the import
-- [ ] **Running the import twice produces no duplicates and no changed counts**
-- [ ] Clearing the marker and re-importing is still safe
-- [ ] Import of an empty localStorage is a no-op, not an error
-- [ ] A failed import leaves localStorage intact and reports the failure
-- [ ] The prompt does not reappear after a successful import
-- [ ] A second user importing their own data does not touch the first user's
-- [ ] `npm run db:deploy` applies pending migrations to the remote project
-- [ ] `npm run db:reset` rebuilds the local database from migrations + seed
+- [x] Import with legacy inline-exercise localStorage brings data across intact —
+      covered by a spec, and driven by hand in a real browser: a plan carrying
+      an inline `exercises` array (no `exerciseIds`, no migration marker)
+      imported as "Imported 2 exercises and 1 plan", with the legacy `name` →
+      `label` mapping and both weights/reps intact
+- [x] Import with current-format localStorage brings data across intact — 3
+      exercises and 1 plan, each exercise present with its values
+- [x] Plan → exercise associations and their order survive the import — the
+      fixture's `exerciseIds` is deliberately non-alphabetical
+      (`[Deadlift, Bench Press, Squat]`) and the plan detail renders exactly
+      that order; confirmed at the database level too, `position` 0/1 in the
+      original order
+- [x] **Running the import twice produces no duplicates and no changed counts** —
+      asserted in a spec, and verified at the source of truth: after two full
+      imports the database holds `plans=1, exercises=2, links=2`
+- [x] Clearing the marker and re-importing is still safe — that is exactly how
+      the double-import above is triggered; correctness comes from the upserts,
+      not the marker
+- [x] Import of an empty localStorage is a no-op, not an error — the prompt is
+      never offered when there is nothing to import
+- [x] A failed import leaves localStorage intact and reports the failure — the
+      write path is stubbed to a 500, the banner reads "Import failed: ...",
+      and localStorage still holds its 1 plan / 3 exercises
+- [x] The prompt does not reappear after a successful import — gone on reload
+      and on a fresh route
+- [x] A second user importing their own data does not touch the first user's —
+      both users end up with their own copy (`other@example.com` and
+      `test@example.com` each own 1 plan / 2 exercises / 2 links). This check is
+      what caught the primary-key collision — see Deviations
+- [x] `npm run db:deploy` applies pending migrations to the remote project — it
+      applied the pending `20260823120000_grant_service_role`, and
+      `supabase migration list` now shows all three matching local↔remote
+- [x] `npm run db:reset` rebuilds the local database from migrations + seed —
+      all three migrations plus the seed, exit 0
 - [ ] Production deploy: sign-up, sign-in, and CRUD all work against the remote
-      project
-- [ ] All E2E specs pass, including the new import spec
-- [ ] README no longer references deleted files
+      project — **not done.** Setting Vercel env vars and the dashboard redirect
+      URLs needs access to those consoles; the schema half of step 5 (the remote
+      migrations) is deployed and verified. See Deviations
+- [x] All E2E specs pass, including the new import spec — **76/76** against a
+      freshly `supabase db reset` database (68 pre-existing + 8 new import specs)
+- [x] README no longer references deleted files — `storage.ts` and
+      `use-local-storage-plans.ts` are gone from it; the structure block now
+      matches the tree on disk
+
+Beyond the plan: the no-Supabase-env-vars fallback was re-verified, since this
+phase touches the localStorage plan repository. With `.env` and `.env.local`
+moved aside, `/` and `/exercise` return 200 with **zero** redirects, the plan
+list renders, and the console is clean — 0 errors, 0 warnings. The console was
+clean across the whole browser session, including both import runs and the
+user switch.
+
+### Deviations from plan
+
+- **Row ids are derived per user, not reused verbatim** —
+  [lib/row-id.ts](lib/row-id.ts). The plan assumed client-generated UUIDs make
+  `upsert` naturally idempotent, and that legacy non-UUID ids were the only
+  remapping case. Both hold, but they miss the real problem: `id` is the sole
+  primary key, so two users importing the *same browser's* localStorage collide.
+  Verified against the live stack rather than reasoned about — the second user's
+  upsert is rejected with `42501 new row violates row-level security policy`, so
+  their import would fail outright while the first user's row is (correctly)
+  never touched. Deriving the id from `(userId, localId)` fixes both cases at
+  once: stable per user, so a re-run still upserts the same rows and stays
+  idempotent, and distinct across users, so each account gets its own copy.
+  This is why the "second user" verification is an import that *succeeds* rather
+  than one that is merely harmless.
+- **`rowId` has a self-check**, [lib/import-local-data.test.ts](lib/import-local-data.test.ts),
+  run with `node --experimental-strip-types`. It covers well-formed v4 output
+  for UUID, non-UUID, empty and oversized input, stability, per-user and
+  per-record distinctness, and 4000 derivations without a collision. It lives in
+  its own module with no imports so plain Node can run it; `tsconfig.json` gains
+  `allowImportingTsExtensions` (safe under `noEmit`) so tsc still checks it.
+- **A real crash was found and fixed in the localStorage plan repository.**
+  `PlanListTable` reads `plan.exerciseIds.length`, and a legacy plan has no
+  `exerciseIds` — `usePlans` fetches on mount *before* the provider's migration
+  effect runs, so the un-migrated shape reaches the table and took the whole
+  page down with "Application error: a client-side exception has occurred".
+  Pre-existing, but on the path this phase exercises. Fixed once in
+  [lib/repositories/local-storage/plan-repository.ts](lib/repositories/local-storage/plan-repository.ts)
+  where every caller routes through, rather than guarding in the table.
+- **Import offerability is snapshotted once per mount.** Recomputing it each
+  render read back the marker the import had just written, unmounting the banner
+  before the user could see "Imported N…". Caught by the suite when six specs
+  went red after a refactor. `useSyncExternalStore` supplies the
+  server/client gate instead of a mount effect, which also keeps the
+  `react-hooks/set-state-in-effect` lint rule satisfied.
+- **The provider gained a `reload()`.** After an import, the page's hooks have
+  already fetched. `reload` swaps in a fresh `epoch` object so the repositories
+  are rebuilt, which is the refetch signal the hooks already key on — no new
+  event channel, and no window events reintroduced. Confirmed live: the plan
+  list populated immediately after the import with no manual reload.
+- **The prompt is a dismissible banner, not a dialog.** Step 2 said
+  "dismissible prompt"; a banner below the nav is the smaller thing that does
+  it, and it does not trap focus over a page the user may want to read first.
+- **Step 5 is half-done, deliberately.** The remote *database* is deployed and
+  verified via `npm run db:deploy`. The Vercel environment variables and the
+  Supabase dashboard redirect URLs are console operations on accounts not
+  reachable from here, so they are left for a human — they are the only reason
+  the production-deploy checkbox above is unticked.
+- **`db:diff` takes the migration name as an argument**: `npm run db:diff -- <name>`,
+  since `supabase db diff -f` requires one. Documented that way in the README.
 
 ---
 

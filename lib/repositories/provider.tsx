@@ -2,9 +2,11 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useState,
   type ReactNode,
 } from "react";
 import type { PlanRepository, ExerciseRepository } from "./types";
@@ -26,6 +28,12 @@ const hasSupabaseEnv = Boolean(
 interface RepositoryContextValue {
   planRepository: PlanRepository;
   exerciseRepository: ExerciseRepository;
+  /**
+   * Re-issue the repositories, so every mounted hook refetches. The hooks key
+   * their effect on repository identity, so a new instance is the refresh
+   * signal they already understand. Used after a bulk import.
+   */
+  reload: () => void;
 }
 
 const RepositoryContext = createContext<RepositoryContextValue | null>(null);
@@ -43,6 +51,11 @@ export function RepositoryProvider({
 }: RepositoryProviderProps) {
   const { user } = useAuth();
   const userId = hasSupabaseEnv ? (user?.id ?? null) : null;
+  // The repositories are rebuilt whenever this changes; `reload` swaps in a
+  // fresh object so the hooks, which key their effect on repository identity,
+  // refetch. Used after a bulk import.
+  const [epoch, setEpoch] = useState<object>({});
+  const reload = useCallback(() => setEpoch({}), []);
 
   useEffect(() => {
     // Side effect, so not in the useMemo below -- StrictMode double-invokes it
@@ -50,6 +63,7 @@ export function RepositoryProvider({
   }, []);
 
   const value = useMemo(() => {
+    void epoch; // part of the memo key: a new epoch means new repositories
     // Signed in with Supabase configured -> server-backed; otherwise localStorage
     const supabase = userId ? createClient() : null;
 
@@ -64,8 +78,9 @@ export function RepositoryProvider({
         (supabase && userId
           ? new SupabaseExerciseRepository(supabase, userId)
           : new LocalStorageExerciseRepository()),
+      reload,
     };
-  }, [planRepository, exerciseRepository, userId]);
+  }, [planRepository, exerciseRepository, userId, reload, epoch]);
 
   return (
     <RepositoryContext.Provider value={value}>
