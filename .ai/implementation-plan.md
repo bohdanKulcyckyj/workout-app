@@ -20,12 +20,16 @@ rewritten.
 > and `useSyncExternalStore` and the `plans-updated`/`exercises-updated` window
 > events are gone from the read path.
 
-> **Status after Phase 5:** all five phases complete. The localStorage → Supabase
+> **Status after Phase 5:** the migration itself is complete. The localStorage → Supabase
 > import ships behind a dismissible banner, the `db:*` scripts are in
 > [package.json](package.json), and the README documents the setup, the schema
 > and the deploy. 76/76 E2E specs pass. The one open item is the production
 > deploy itself (Vercel env vars + Supabase redirect URLs), which needs console
 > access rather than code — see Phase 5 Deviations.
+>
+> **Phase 6 is queued, not started:** once the import has run against production,
+> the import and the localStorage fallback both get deleted, leaving Supabase as
+> the only backend. It is gated on that import actually having happened.
 
 ### Key Decisions
 
@@ -948,6 +952,110 @@ user switch.
   the production-deploy checkbox above is unticked.
 - **`db:diff` takes the migration name as an argument**: `npm run db:diff -- <name>`,
   since `supabase db diff -f` requires one. Documented that way in the README.
+
+---
+
+## Phase 6: Remove the localStorage Path
+
+- [ ] Complete
+
+### Goals
+
+Delete the import and the localStorage fallback, leaving Supabase as the only
+backend. This is a **deletion phase** — no new features. It is deliberately
+separate from Phase 5 and must not start until the Phase 5 import has actually
+run against production and the data is confirmed in Supabase.
+
+The app has a single user (the author), so once that user's data is migrated
+there is nothing left for either code path to serve.
+
+### Preconditions — verify before deleting anything
+
+- [ ] The production import has run and the data is in the remote project.
+      Confirm by querying the remote database, not by trusting the UI.
+- [ ] **Row ids are derived, not preserved.** [lib/row-id.ts](lib/row-id.ts)
+      maps `(userId, localId)` → row id, so the ids in Supabase are *not* the
+      ids in localStorage. Deleting the import deletes that mapping, and a
+      re-import afterwards is not possible without it. Confirm the data is
+      across before this becomes irreversible.
+- [ ] Keep a copy of the browser's localStorage (export the two keys to a file)
+      until the remote data has been verified. It is the only other copy.
+
+### Steps
+
+1. **Add backend visibility first** — a one-line console log in
+   [lib/repositories/provider.tsx](lib/repositories/provider.tsx) naming the
+   active backend (`supabase` vs `localStorage`) and, for Supabase, the user id.
+   This is what proves the production app is genuinely Supabase-backed before
+   the fallback is removed. Ship this ahead of the deletion, not with it.
+   (Requested during Phase 5 review; the app currently gives no way to tell
+   which backend is in use.)
+
+2. **Delete the import**
+   - [lib/import-local-data.ts](lib/import-local-data.ts),
+     [lib/import-local-data.test.ts](lib/import-local-data.test.ts),
+     [lib/row-id.ts](lib/row-id.ts)
+   - [components/import-prompt.tsx](components/import-prompt.tsx) and its render
+     in [app/layout.tsx](app/layout.tsx)
+   - [e2e/import.spec.ts](e2e/import.spec.ts)
+   - `allowImportingTsExtensions` in [tsconfig.json](tsconfig.json), added only
+     for the import self-check
+
+3. **Delete the localStorage repositories**
+   - [lib/repositories/local-storage/](lib/repositories/local-storage/) entirely
+     (3 files), plus its re-exports in
+     [lib/repositories/index.ts](lib/repositories/index.ts)
+   - [lib/migrations.ts](lib/migrations.ts) — the legacy inline-exercise
+     migration exists only to feed the import and the localStorage repos
+
+4. **Simplify the provider** ([lib/repositories/provider.tsx](lib/repositories/provider.tsx))
+   - Drop `hasSupabaseEnv` and the localStorage branches. With no fallback the
+     repositories require a user, so the provider should render nothing (or a
+     loading state) until one exists rather than constructing repositories that
+     cannot work.
+   - Keep `reload()` — it is the hooks' refetch signal and is not import-specific.
+
+5. **Decide what "unconfigured" means now** — this is the real design question
+   of the phase, not a mechanical deletion. Three guards were added in Phase 3
+   specifically so a missing env var degrades to localStorage:
+   [lib/supabase/client.ts](lib/supabase/client.ts) returns `null`,
+   [lib/auth/provider.tsx](lib/auth/provider.tsx) handles that null, and
+   [lib/supabase/middleware.ts](lib/supabase/middleware.ts) returns early so the
+   proxy does not redirect everything to `/login`.
+   With no fallback, missing env vars are a **misconfiguration, not a mode**.
+   Prefer failing loudly at startup over silently rendering a broken app.
+   Note the cost: `npm run dev` on a fresh clone will then require Docker and a
+   running Supabase stack. That is the trade being accepted.
+
+6. **Update the docs**
+   - [README.md](README.md) — remove the "falls back to localStorage" claims in
+     the Tech Stack table, the Features list, and Getting Started; Supabase
+     becomes a hard prerequisite.
+   - [.env.example](.env.example) — the two `NEXT_PUBLIC_` vars are now required.
+
+### Verification
+
+- [ ] The backend log from step 1 reports `supabase` in production, with the
+      expected user id
+- [ ] `grep -rn "localStorage" app components lib` returns nothing outside
+      [lib/auth/](lib/auth/) — the only legitimate remaining use is whatever
+      `@supabase/ssr` does internally
+- [ ] All remaining E2E specs pass (76 minus the 8 deleted import specs = 68)
+- [ ] `npx tsc --noEmit` passes; eslint no worse than the current baseline
+      (11 problems, all pre-existing)
+- [ ] With env vars absent the app fails **loudly and immediately**, rather than
+      rendering an empty or broken UI
+- [ ] Signed-in CRUD still works end to end against the remote project
+- [ ] The `import-completed-<userId>` marker left in the browser is harmless
+      dead data — confirm nothing reads it after the deletion
+
+### Notes
+
+- Phase 5's `ImportPrompt` renders on every page. Removing it also removes the
+  banner's interaction with detail pages flagged at the end of Phase 5, so that
+  open question resolves itself here.
+- This phase should be a **net-negative diff**. If it grows features, it has
+  drifted from its purpose.
 
 ---
 

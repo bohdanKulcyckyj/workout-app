@@ -62,6 +62,16 @@ export function RepositoryProvider({
     migrateLocalStorage();
   }, []);
 
+  // Which backend is serving this session. ponytail: remove with the
+  // localStorage path in Phase 6.
+  useEffect(() => {
+    console.info(
+      userId
+        ? `[repositories] backend=supabase user=${userId}`
+        : "[repositories] backend=localStorage"
+    );
+  }, [userId]);
+
   const value = useMemo(() => {
     void epoch; // part of the memo key: a new epoch means new repositories
     // Signed in with Supabase configured -> server-backed; otherwise localStorage
