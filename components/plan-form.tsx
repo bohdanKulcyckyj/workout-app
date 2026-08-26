@@ -75,7 +75,7 @@ export function PlanForm({
   async function handleCreateExercise(exercise: StandaloneExercise) {
     // Await the save: the row below renders by looking the id up in
     // `allExercises`, so adding it before the store has the exercise renders
-    // nothing. Free under localStorage, a round-trip under Supabase.
+    // nothing.
     await onExerciseCreate(exercise);
     setSelectedExerciseIds((prev) => [...prev, exercise.id]);
   }

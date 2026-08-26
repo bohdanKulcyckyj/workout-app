@@ -1,11 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { StandaloneExercise } from "../../types";
-import type { ExerciseRepository } from "../types";
 import { toExercise, toExerciseRow, type ExerciseRow } from "../../supabase/mappers";
 
 const COLUMNS = "id, label, description, weight, reps";
 
-export class SupabaseExerciseRepository implements ExerciseRepository {
+export class SupabaseExerciseRepository {
   private supabase: SupabaseClient;
   private userId: string;
 

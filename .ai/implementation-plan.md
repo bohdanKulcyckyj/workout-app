@@ -27,9 +27,12 @@ rewritten.
 > deploy itself (Vercel env vars + Supabase redirect URLs), which needs console
 > access rather than code — see Phase 5 Deviations.
 >
-> **Phase 6 is queued, not started:** once the import has run against production,
-> the import and the localStorage fallback both get deleted, leaving Supabase as
-> the only backend. It is gated on that import actually having happened.
+> **Status after Phase 6:** done. The production import was confirmed to have run
+> (21 exercises / 3 plans / 20 links in the remote database), so the import and
+> the localStorage fallback were both deleted — Supabase is now the only backend
+> and missing env vars throw instead of degrading. Two items stay open: the
+> no-env-vars browser check and production CRUD, both for the environment
+> reasons in Phase 6 Deviations.
 
 ### Key Decisions
 
@@ -957,7 +960,7 @@ user switch.
 
 ## Phase 6: Remove the localStorage Path
 
-- [ ] Complete
+- [x] Complete
 
 ### Goals
 
@@ -971,15 +974,22 @@ there is nothing left for either code path to serve.
 
 ### Preconditions — verify before deleting anything
 
-- [ ] The production import has run and the data is in the remote project.
-      Confirm by querying the remote database, not by trusting the UI.
-- [ ] **Row ids are derived, not preserved.** [lib/row-id.ts](lib/row-id.ts)
-      maps `(userId, localId)` → row id, so the ids in Supabase are *not* the
-      ids in localStorage. Deleting the import deletes that mapping, and a
-      re-import afterwards is not possible without it. Confirm the data is
-      across before this becomes irreversible.
-- [ ] Keep a copy of the browser's localStorage (export the two keys to a file)
-      until the remote data has been verified. It is the only other copy.
+- [x] The production import has run and the data is in the remote project —
+      confirmed by querying the remote database directly over the pooler, not
+      through the UI: **1 user, 21 exercises, 3 plans, 20 links**, every row
+      owned by the single real account (`bohdan.kulchytskyy1@gmail.com`), with
+      plans `Full body 1` (10 links), `Full body 2` (9), `Random` (1). An
+      anonymous PostgREST read returns 0/0/0, which is RLS working, not absence
+      of data — that distinction is why this was checked at the database level
+- [x] **Row ids are derived, not preserved.** Acknowledged before deleting
+      [lib/row-id.ts](lib/row-id.ts). The counts above are the confirmation
+      that the data is across, so losing the `(userId, localId)` → row id
+      mapping is acceptable
+- [ ] Keep a copy of the browser's localStorage — **not done, and not doable
+      from here.** This is an action in the author's production browser; no
+      agent-side step can perform it. The remote data has been verified at the
+      database level (above), which is the substantive protection the
+      precondition was after. Flagged rather than silently ticked
 
 ### Steps
 
@@ -1035,19 +1045,155 @@ there is nothing left for either code path to serve.
 
 ### Verification
 
-- [ ] The backend log from step 1 reports `supabase` in production, with the
-      expected user id
-- [ ] `grep -rn "localStorage" app components lib` returns nothing outside
-      [lib/auth/](lib/auth/) — the only legitimate remaining use is whatever
-      `@supabase/ssr` does internally
-- [ ] All remaining E2E specs pass (76 minus the 8 deleted import specs = 68)
-- [ ] `npx tsc --noEmit` passes; eslint no worse than the current baseline
-      (11 problems, all pre-existing)
-- [ ] With env vars absent the app fails **loudly and immediately**, rather than
-      rendering an empty or broken UI
-- [ ] Signed-in CRUD still works end to end against the remote project
-- [ ] The `import-completed-<userId>` marker left in the browser is harmless
-      dead data — confirm nothing reads it after the deletion
+- [x] The backend log from step 1 reports `supabase` — the log was **already in
+      place** before this phase started (added during Phase 5 review, carrying a
+      `ponytail:` comment marking it for removal here). Its job was to prove the
+      production app was Supabase-backed *before* the fallback went; the
+      remote-database counts in the Preconditions are the stronger form of that
+      same proof, so the log was removed with the branch it described
+- [x] `grep -rn "localStorage" app components lib` returns nothing outside
+      [lib/auth/](lib/auth/) — one stale *comment* in
+      [components/plan-form.tsx](components/plan-form.tsx) was the only hit and
+      has been reworded. `lib/auth/` itself is now clean too; the null-client
+      handling that mentioned the fallback is gone
+- [x] All remaining E2E specs pass — **68 passed (3.5m)**, exactly the predicted
+      76 − 8 deleted import specs, against a freshly `db:reset` database. 68 is
+      independently the right denominator: summing `test(` across the ten
+      remaining spec files gives exactly 68. Note this figure is as of that run:
+      post-phase review added [e2e/auth-transitions.spec.ts](e2e/auth-transitions.spec.ts)
+      (3 tests), so the tree now holds 11 spec files / 71 tests.
+      The run needed corroborating at all because an earlier run of this same
+      suite reported a green exit code while running **zero** tests (see
+      Deviations). There is **one** independent counter-check, not three:
+      `select count(*) from auth.refresh_tokens` = **68**. The suite signs in
+      once per test, `retries` is 0 and `db:reset` zeroes the table, so this
+      counts tests that actually executed. Its limit, worth stating: it counts
+      *sign-ins*, so it is a **liveness** check, not a correctness one — a run
+      where all 68 tests signed in and then failed would produce 68 too. That is
+      fit for purpose, since liveness is the exact failure mode it was invented
+      to catch, but it does not confirm the tests **passed**.
+      The two things previously listed alongside it are not independent checks.
+      The reporter's own `68 passed` is the claim being verified, not a check on
+      it. And "0 failure artifacts in `test-results/`" is worth roughly nothing
+      here — it is the precise signal that already lied during the zero-test
+      incident recorded below, which "exited 0 with no failure artifacts"
+- [x] `npx tsc --noEmit` passes; eslint **better** than the baseline, not merely
+      no worse: **3 problems (0 errors, 3 warnings)**, down from 11 problems /
+      6 errors / 5 warnings. The deleted files carried most of the old baseline;
+      what remains is the pre-existing react-hook-form `watch()` compiler
+      warning and two unused imports in `exercise-selector.tsx`
+- [x] With env vars absent the app fails **loudly and immediately** — with
+      `.env` and `.env.local` moved aside, `/` returns **HTTP 500** and the
+      server log carries the thrown message verbatim: *"Missing
+      NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY. Copy
+      .env.example to .env.local and fill them in (see README)."* No empty
+      shell, no half-rendered UI. This is the exact inverse of the Phase 3/4/5
+      check, which required the app to *degrade* here — the trade step 5 names
+- [ ] Signed-in CRUD still works end to end **against the remote project** —
+      not done, and the reason is a **choice, not a blocker**. Two things were
+      previously conflated here. Testing the app *as deployed on Vercel* is
+      genuinely blocked: its env vars are a console operation. But testing CRUD
+      against the **remote project** is not blocked from this machine —
+      [.env](.env) already holds `NEXT_PUBLIC_SUPABASE_URL` and
+      `NEXT_PUBLIC_SUPABASE_ANON_KEY` for the remote project (ref
+      `ziyvvujjnmxmsermgxwj`), it is only `.env.local` pointing at the local
+      stack that shadows them, and the remote PostgREST endpoint answers
+      **HTTP 200** with that anon key from here. `npm run dev` with `.env.local`
+      moved aside would exercise remote CRUD.
+      It was deliberately not run: the remote project holds the single real
+      user's production data, and this check writes test rows into it. The
+      equivalent flows are verified against the local stack twice over — by the
+      68-spec suite, and by hand in a real browser (below)
+- [x] The `import-completed-<userId>` marker left in the browser is harmless
+      dead data — `grep -rn "import-completed\|importMarkerKey" app components
+      lib e2e` returns nothing. Nothing reads it
+
+Beyond the plan, the auth transitions were driven by hand in a real browser via
+Playwright MCP, because the provider bug below lives specifically in them and a
+green suite alone would not show the console:
+
+- Signed-out `/` redirects to `/login`; sign-in as `other@example.com` lands on
+  `/` with no runtime-error overlay
+- **Sign-out from a plan *detail* page** — the hardest case, and the one an
+  `isLoading` gate does not cover — goes straight to `/login` with no error
+- Browser Back after sign-out settles on `/login`, matching Phase 2's documented
+  behaviour (the router starts restoring the route, the proxy redirect wins)
+- Full CRUD as `other@example.com`: created an exercise and a plan, renamed the
+  plan (verified in the database: `Phase6 Plan Renamed`, 1 link,
+  `updated_at > created_at` from the trigger), then deleted it — the plan's link
+  cascaded to 0 while the exercise survived
+- Data survived a sign-out / sign-in round trip, which is what proves the read
+  came from Supabase rather than the browser
+- **No import banner** anywhere — `ImportPrompt` is gone from the layout
+- **0 console errors and 0 warnings across the entire session**
+
+`localStorage` did still hold `workout-plans` and `migration-v1-done` in that
+browser profile — both **inert leftovers** from the deleted `import.spec.ts`
+(the value is the old `"Unmigrated Plan"` fixture, dated 2026-01-01). Proven
+inert rather than assumed: the on-screen plan was absent from that value, and
+patching `Storage.prototype.setItem` recorded **zero** writes during a page
+load. Same category as the `import-completed-*` marker — dead data the app no
+longer reads. Note also that no `sb-*` key appears: sessions are cookie-based,
+which is why the `grep` exception carved out for `lib/auth/` turned out to be
+unnecessary.
+
+### Deviations from plan
+
+- **A green E2E run reported success while running zero tests.** The first
+  suite was killed mid-run (it was failing on the provider bug), but Playwright's
+  `webServer` child survived it — a stale `next dev` holding port 3000 and
+  `.next/dev/lock` at 83% CPU. The next suite could not own that server and
+  timed out every spec at 35s, yet still **exited 0 with no failure artifacts**,
+  which is exactly what a passing run looks like from the outside. Caught by
+  asking how many tests had *actually executed*: `auth.refresh_tokens` was 0
+  after 28 minutes, in a suite that signs in once per test. The lesson is in the
+  verification above — the run is now confirmed by an independent counter, not
+  by the exit code. Kill Playwright with its `webServer` child, and prefer
+  `--reporter=line`, whose progress is unbuffered when piped.
+- **The provider's signed-out branch was a real bug, caught by the suite.**
+  Step 4 says the provider "should render nothing (or a loading state) until
+  [a user] exists". The first implementation rendered `children` *without* the
+  context in that case, which looks harmless and is not: sign-in and sign-out
+  are both client-side transitions where a data page renders before the proxy's
+  redirect lands — during sign-in the session has not resolved, and on sign-out
+  `NavHeader` clears the user *before* `router.replace("/login")`. Either way a
+  page called `useRepositories()` against a missing provider and threw
+  `useRepositories must be used within a RepositoryProvider`. **All 28 tests in
+  the first run failed on it.** The fix gates on the route instead: `/login` is
+  the one path that legitimately renders signed out, so it gets `children`, and
+  every other path renders `null` until the redirect lands. Gating on
+  `isLoading` alone was tried and is not sufficient — it does not cover
+  sign-out, where auth has finished loading and the user is simply gone.
+- **`createClient()` throws rather than returning `null`.** Step 5 asked for a
+  decision on what "unconfigured" means. Throwing at the source is the smallest
+  version: it is one guard where every caller already routes through, and it
+  deletes the null-handling Phase 3 had to add in three places. The proxy
+  ([lib/supabase/middleware.ts](lib/supabase/middleware.ts)) throws too, since
+  it runs before any page renders and is therefore the earliest point that can
+  refuse. Both messages name the two variables and point at `.env.example`.
+- **The step-1 backend log was deleted, not shipped ahead of the deletion.** It
+  was already in the codebase when this phase started — Phase 5's review added
+  it, with a `ponytail:` comment marking it for removal here — so the "ship it
+  first" sequencing had already happened. Since the remote database was queried
+  directly for the Preconditions, the log had no remaining job.
+- **`.env.example` needed no edit.** Step 6 asks for the two `NEXT_PUBLIC_` vars
+  to be marked required; they were already under a `--- Required by the app ---`
+  heading from Phase 2. Nothing was changed.
+- **`lib/repositories/index.ts` no longer re-exports the localStorage repos**,
+  and [tsconfig.json](tsconfig.json) loses `allowImportingTsExtensions`, which
+  existed only for the deleted import self-check.
+- **One verification item is left open** — production CRUD against the remote
+  project. Not blocked: reachable from this machine with the credentials already
+  in [.env](.env), and skipped on purpose because it would write test rows into
+  the single real user's production data. The *Vercel deploy* is the part still
+  blocked on console access, as Phase 5 flagged. Noted inline above rather than
+  ticked. Everything else in this phase is verified.
+- **Two pre-existing repo-hygiene issues, deliberately not fixed here**, since
+  this phase is a deletion and folding them in would muddy its diff:
+  `test-results/.last-run.json` is tracked in git (committed by accident in
+  `5a8d4df`) and `test-results/` is not in `.gitignore`; `.playwright-mcp/` is
+  tracked too. Both are tool scratch output and belong in `.gitignore` in their
+  own commit.
 
 ### Notes
 
@@ -1055,7 +1201,8 @@ there is nothing left for either code path to serve.
   banner's interaction with detail pages flagged at the end of Phase 5, so that
   open question resolves itself here.
 - This phase should be a **net-negative diff**. If it grows features, it has
-  drifted from its purpose.
+  drifted from its purpose. It is: 9 files deleted, and the only additions are
+  the two `throw` guards and the provider's route gate.
 
 ---
 

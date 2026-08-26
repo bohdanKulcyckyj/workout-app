@@ -22,18 +22,12 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const NOT_CONFIGURED = "Supabase is not configured";
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
   const [session, setSession] = useState<Session | null>(null);
-  // Nothing to load when Supabase is not configured -- the app stays signed
-  // out and falls back to the localStorage repositories.
-  const [isLoading, setIsLoading] = useState(supabase !== null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!supabase) return;
-
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setIsLoading(false);
@@ -41,6 +35,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
       (_event, nextSession) => {
+        // Losing the session mid-session -- another tab signing out, or refresh
+        // token expiry -- must not strand the user on a blank page. That
+        // redirect is driven by RedirectToLogin in lib/repositories/provider.tsx
+        // rather than from here: this callback's router belongs to a tree the
+        // repository gate unmounts the instant the session clears, and a
+        // navigation issued from an unmounted tree is silently dropped.
         setSession(nextSession);
         setIsLoading(false);
       }
@@ -55,7 +55,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       isLoading,
       signIn: async (email, password) => {
-        if (!supabase) return { error: NOT_CONFIGURED };
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -63,12 +62,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: error?.message };
       },
       signUp: async (email, password) => {
-        if (!supabase) return { error: NOT_CONFIGURED };
         const { error } = await supabase.auth.signUp({ email, password });
         return { error: error?.message };
       },
       signOut: async () => {
-        await supabase?.auth.signOut();
+        await supabase.auth.signOut();
       },
     }),
     [session, isLoading, supabase]

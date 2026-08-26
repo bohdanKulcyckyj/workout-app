@@ -1,11 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WorkoutPlan } from "../../types";
-import type { PlanRepository } from "../types";
 import { toPlan, toPlanRow, type PlanRow } from "../../supabase/mappers";
 
 const COLUMNS = "id, name, created_at, updated_at, plan_exercises(exercise_id, position)";
 
-export class SupabasePlanRepository implements PlanRepository {
+export class SupabasePlanRepository {
   private supabase: SupabaseClient;
   private userId: string;
 
