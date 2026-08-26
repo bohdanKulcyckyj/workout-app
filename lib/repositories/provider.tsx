@@ -2,101 +2,83 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from "react";
-import type { PlanRepository, ExerciseRepository } from "./types";
-import {
-  LocalStoragePlanRepository,
-  LocalStorageExerciseRepository,
-} from "./local-storage";
+import { usePathname, useRouter } from "next/navigation";
 import { SupabasePlanRepository } from "./supabase/plan-repository";
 import { SupabaseExerciseRepository } from "./supabase/exercise-repository";
 import { createClient } from "../supabase/client";
 import { useAuth } from "../auth/provider";
-import { migrateLocalStorage } from "../migrations";
-
-const hasSupabaseEnv = Boolean(
-  process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
 
 interface RepositoryContextValue {
-  planRepository: PlanRepository;
-  exerciseRepository: ExerciseRepository;
-  /**
-   * Re-issue the repositories, so every mounted hook refetches. The hooks key
-   * their effect on repository identity, so a new instance is the refresh
-   * signal they already understand. Used after a bulk import.
-   */
-  reload: () => void;
+  planRepository: SupabasePlanRepository;
+  exerciseRepository: SupabaseExerciseRepository;
 }
 
 const RepositoryContext = createContext<RepositoryContextValue | null>(null);
 
-interface RepositoryProviderProps {
-  children: ReactNode;
-  planRepository?: PlanRepository;
-  exerciseRepository?: ExerciseRepository;
-}
-
-export function RepositoryProvider({
-  children,
-  planRepository,
-  exerciseRepository,
-}: RepositoryProviderProps) {
-  const { user } = useAuth();
-  const userId = hasSupabaseEnv ? (user?.id ?? null) : null;
-  // The repositories are rebuilt whenever this changes; `reload` swaps in a
-  // fresh object so the hooks, which key their effect on repository identity,
-  // refetch. Used after a bulk import.
-  const [epoch, setEpoch] = useState<object>({});
-  const reload = useCallback(() => setEpoch({}), []);
-
-  useEffect(() => {
-    // Side effect, so not in the useMemo below -- StrictMode double-invokes it
-    migrateLocalStorage();
-  }, []);
-
-  // Which backend is serving this session. ponytail: remove with the
-  // localStorage path in Phase 6.
-  useEffect(() => {
-    console.info(
-      userId
-        ? `[repositories] backend=supabase user=${userId}`
-        : "[repositories] backend=localStorage"
-    );
-  }, [userId]);
+export function RepositoryProvider({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth();
+  const userId = user?.id ?? null;
+  const isLoginRoute = usePathname().startsWith("/login");
 
   const value = useMemo(() => {
-    void epoch; // part of the memo key: a new epoch means new repositories
-    // Signed in with Supabase configured -> server-backed; otherwise localStorage
-    const supabase = userId ? createClient() : null;
+    if (!userId) return null;
 
+    const supabase = createClient();
     return {
-      planRepository:
-        planRepository ??
-        (supabase && userId
-          ? new SupabasePlanRepository(supabase, userId)
-          : new LocalStoragePlanRepository()),
-      exerciseRepository:
-        exerciseRepository ??
-        (supabase && userId
-          ? new SupabaseExerciseRepository(supabase, userId)
-          : new LocalStorageExerciseRepository()),
-      reload,
+      planRepository: new SupabasePlanRepository(supabase, userId),
+      exerciseRepository: new SupabaseExerciseRepository(supabase, userId),
     };
-  }, [planRepository, exerciseRepository, userId, reload, epoch]);
+  }, [userId]);
+
+  // On a fresh page load `user` is null only because getSession() is still in
+  // flight -- it says nothing about whether anyone is signed in. Redirecting on
+  // that guess bounced a signed-in user off any route they loaded directly:
+  // the proxy answers /login with a 307 to /, so they landed on the plans list
+  // instead of the page they asked for. Wait for the real answer.
+  if (isLoading && !isLoginRoute) return null;
+
+  // Session resolved and there is genuinely no user. /login is the one route
+  // that renders signed out, and it does not touch the repositories. Every
+  // other route is behind an auth redirect, but the client gets there a beat
+  // later -- on sign-out the user clears before the redirect, and a data page
+  // would otherwise render and call useRepositories() against a missing
+  // provider. Hold it back until the redirect lands.
+  if (!value) {
+    return isLoginRoute ? <>{children}</> : <RedirectToLogin />;
+  }
 
   return (
     <RepositoryContext.Provider value={value}>
       {children}
     </RepositoryContext.Provider>
   );
+}
+
+/**
+ * Renders nothing, but drives the redirect from inside a *mounted* component.
+ *
+ * Sign-out clears the user, which lands on the branch above. Returning a bare
+ * `null` there unmounts the whole tree -- including NavHeader, whose click
+ * handler was mid-`router.replace("/login")` -- and a navigation issued from an
+ * unmounted tree is silently dropped. The result was a permanently blank page
+ * on a frozen URL: no error, no redirect, recoverable only by a manual reload.
+ * Keeping one live component here means there is always a mounted owner for the
+ * navigation. Same reason it cannot be an event-listener redirect in
+ * lib/auth/provider.tsx: that listener's router dies with the same unmount.
+ */
+function RedirectToLogin() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/login");
+  }, [router]);
+
+  return null;
 }
 
 export function useRepositories(): RepositoryContextValue {
@@ -107,10 +89,10 @@ export function useRepositories(): RepositoryContextValue {
   return context;
 }
 
-export function usePlanRepository(): PlanRepository {
+export function usePlanRepository(): SupabasePlanRepository {
   return useRepositories().planRepository;
 }
 
-export function useExerciseRepository(): ExerciseRepository {
+export function useExerciseRepository(): SupabaseExerciseRepository {
   return useRepositories().exerciseRepository;
 }

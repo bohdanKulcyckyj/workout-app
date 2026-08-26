@@ -36,8 +36,6 @@ A sleek, mobile-first workout plan manager and tracker built with Next.js. Creat
 - **Edit & delete plans** -- full CRUD with confirmation dialogs
 - **Accounts & private data** -- email/password auth, with row-level security so
   every user sees only their own plans and exercises
-- **Import your local data** -- data from the pre-account localStorage version is
-  offered for one-click import after sign-in
 - **Dark theme** -- gym-friendly dark UI with red accents
 - **Mobile-first** -- touch-friendly buttons and responsive layout
 
@@ -51,7 +49,7 @@ A sleek, mobile-first workout plan manager and tracker built with Next.js. Creat
 | Icons | [Lucide React](https://lucide.dev) |
 | Effects | [canvas-confetti](https://github.com/catdad/canvas-confetti) |
 | Backend | [Supabase](https://supabase.com) (Postgres, Auth, RLS) |
-| Storage | Supabase Postgres, behind a repository interface (localStorage fallback when unconfigured) |
+| Storage | Supabase Postgres, behind a repository interface |
 | Testing | [Playwright](https://playwright.dev) (E2E) |
 | Language | TypeScript |
 
@@ -101,8 +99,9 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000). Sign up, or sign in with
 the seeded user `test@example.com` / `test-password-123`.
 
-Without the Supabase env vars the app still runs, falling back to localStorage
-with no sign-in required.
+Supabase is a hard requirement -- there is no offline fallback. Without both
+`NEXT_PUBLIC_` variables the app fails immediately with a clear error rather
+than rendering a broken UI.
 
 ### Available Scripts
 
@@ -133,23 +132,18 @@ components/
   plan-form.tsx                 # Reusable create/edit form
   plan-list-table.tsx           # Plan list with actions
   exercise-table.tsx            # Read-only exercise table
-  import-prompt.tsx             # Offers the localStorage -> account import
   nav-header.tsx                # Nav, current user, sign out
   error-message.tsx             # Inline error for failed reads/writes
   ui/                           # shadcn/ui primitives
 lib/
   types.ts                      # Zod schemas (StandaloneExercise, WorkoutPlan)
   auth/provider.tsx             # Auth context
-  supabase/                     # Browser/server clients + row mappers
+  supabase/                     # Browser + proxy clients + row mappers
   repositories/
     types.ts                    # PlanRepository / ExerciseRepository interfaces
-    provider.tsx                # Picks Supabase or localStorage by auth state
+    provider.tsx                # Builds the repositories for the signed-in user
     supabase/                   # Supabase implementations
-    local-storage/              # localStorage implementations (fallback)
   hooks/                        # usePlans / useExercises, async via repositories
-  import-local-data.ts          # localStorage -> Supabase import
-  row-id.ts                     # Deterministic per-user row ids for the import
-  migrations.ts                 # Legacy inline-exercise localStorage migration
 proxy.ts                        # Session refresh + auth redirects (Next proxy)
 supabase/
   migrations/                   # Schema and RLS, source of truth
@@ -184,7 +178,6 @@ The project includes comprehensive Playwright E2E tests covering every core user
 - Plan creation, viewing, editing, and deletion
 - Exercise CRUD, and the database cascade when an exercise is deleted
 - Workout tracking: checking exercises, modifying values, confetti trigger
-- The localStorage import, including idempotency and per-user isolation
 - Edge cases: empty states, confirmation dialogs, exercise reset
 
 The suite runs against the local Supabase stack and exercises the real auth
